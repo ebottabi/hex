@@ -116,6 +116,33 @@ where
     M::StreamingResponse: Send + Sync + Unpin + Clone + 'static,
     P: rig::agent::PromptHook<M> + 'static,
 {
+    run_stream(agent, prompt, max_turns, false).await
+}
+
+pub async fn run_quiet<M, P>(
+    agent: &Agent<M, P>,
+    prompt: &str,
+    max_turns: usize,
+) -> anyhow::Result<String>
+where
+    M: CompletionModel + 'static,
+    M::StreamingResponse: Send + Sync + Unpin + Clone + 'static,
+    P: rig::agent::PromptHook<M> + 'static,
+{
+    run_stream(agent, prompt, max_turns, true).await
+}
+
+async fn run_stream<M, P>(
+    agent: &Agent<M, P>,
+    prompt: &str,
+    max_turns: usize,
+    quiet: bool,
+) -> anyhow::Result<String>
+where
+    M: CompletionModel + 'static,
+    M::StreamingResponse: Send + Sync + Unpin + Clone + 'static,
+    P: rig::agent::PromptHook<M> + 'static,
+{
     let mut stream = agent
         .stream_chat(prompt.to_string(), Vec::<Message>::new())
         .multi_turn(max_turns)
@@ -127,14 +154,18 @@ where
         match item {
             Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(text))) => {
                 full_response.push_str(&text.text);
-                print!("{}", text.text);
-                let _ = std::io::Write::flush(&mut std::io::stdout());
+                if !quiet {
+                    print!("{}", text.text);
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
             }
             Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Reasoning(
                 r,
             ))) => {
-                eprint!("{}", r.display_text());
-                let _ = std::io::Write::flush(&mut std::io::stderr());
+                if !quiet {
+                    eprint!("{}", r.display_text());
+                    let _ = std::io::Write::flush(&mut std::io::stderr());
+                }
             }
             Ok(MultiTurnStreamItem::FinalResponse(_)) => break,
             Ok(_) => {}
@@ -145,7 +176,9 @@ where
         }
     }
 
-    println!();
+    if !quiet {
+        println!();
+    }
     Ok(full_response)
 }
 
@@ -162,6 +195,22 @@ pub async fn run_print_any(
         AnyAgent::Ollama(a) => run_print(a, prompt, max_turns).await,
         AnyAgent::Groq(a) => run_print(a, prompt, max_turns).await,
         AnyAgent::Custom(a) => run_print(a, prompt, max_turns).await,
+    }
+}
+
+pub async fn run_quiet_any(
+    agent: &AnyAgent,
+    prompt: &str,
+    max_turns: usize,
+) -> anyhow::Result<String> {
+    match agent {
+        AnyAgent::OpenRouter(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::OpenAI(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::Anthropic(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::Gemini(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::Ollama(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::Groq(a) => run_quiet(a, prompt, max_turns).await,
+        AnyAgent::Custom(a) => run_quiet(a, prompt, max_turns).await,
     }
 }
 

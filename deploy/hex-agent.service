@@ -1,0 +1,33 @@
+[Unit]
+Description=hex-agent health check / readiness gate
+Documentation=https://github.com/ebottabi/hex
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Until M8 (ACP server) lands, hex is invoked on-demand (CLI / Zed ACP client).
+# This unit verifies the binary + toolchain are ready and stays "active" so
+# orchestrators can health-check it.
+Type=oneshot
+RemainAfterExit=yes
+User=hex
+Group=hex
+WorkingDirectory=/var/lib/hex
+EnvironmentFile=-/etc/hex/hex.env
+ExecStart=/usr/local/bin/hex --version
+ExecStartPost=/bin/sh -c '/usr/local/bin/hex --help >/dev/null 2>&1 && echo "hex-agent ready"'
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hex-agent
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hex /var/log/hex
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

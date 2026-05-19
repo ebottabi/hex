@@ -1,0 +1,1 @@
+Kali's metapackages (kali-linux-default, kali-tools-*) and real-world pentest workflows.

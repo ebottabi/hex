@@ -1,0 +1,140 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to server after build"
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  BIN_NAME: hex
+
+jobs:
+  build:
+    name: Build (ubuntu-latest)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          echo "version=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings || true
+
+      - name: cargo test
+        run: cargo test --release --all
+
+      - name: cargo build --release
+        run: cargo build --release --locked --bin "$BIN_NAME"
+
+      - name: Strip binary
+        run: strip "target/release/$BIN_NAME"
+
+      - name: Stage artifact
+        run: |
+          mkdir -p dist
+          cp "target/release/$BIN_NAME" "dist/$BIN_NAME"
+          cp install-tools.sh dist/
+          cp deploy/hex-agent.service dist/
+          cp deploy/deploy.sh dist/
+          cd dist
+          sha256sum "$BIN_NAME" install-tools.sh > SHA256SUMS
+          tar -czf "../${BIN_NAME}-${{ steps.meta.outputs.version }}-linux-x86_64.tar.gz" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hex-linux-x86_64
+          path: hex-${{ steps.meta.outputs.version }}-linux-x86_64.tar.gz
+          retention-days: 30
+
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: hex-${{ steps.meta.outputs.version }}-linux-x86_64.tar.gz
+          generate_release_notes: true
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.deploy == true) ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    environment:
+      name: production
+      url: ssh://${{ secrets.DEPLOY_HOST }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: hex-linux-x86_64
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bundle
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          BUNDLE="hex-${{ needs.build.outputs.version }}-linux-x86_64.tar.gz"
+          scp -o StrictHostKeyChecking=accept-new "$BUNDLE" "$USER@$HOST:/tmp/hex-deploy.tar.gz"
+
+      - name: Run remote deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          ssh "$USER@$HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          WORK=$(mktemp -d)
+          tar -xzf /tmp/hex-deploy.tar.gz -C "$WORK"
+          cd "$WORK"
+          sha256sum -c SHA256SUMS
+          chmod +x hex deploy.sh install-tools.sh
+          sudo ./deploy.sh
+          REMOTE
+
+      - name: Smoke test remote
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh "$USER@$HOST" 'hex --version && systemctl is-active hex-agent || true'

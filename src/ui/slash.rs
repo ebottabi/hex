@@ -1,0 +1,847 @@
+use compact_str::CompactString;
+use crossterm::style::Color;
+use smallvec::SmallVec;
+
+use crate::cli::Cli;
+use crate::config::Config;
+use crate::context::ContextFiles;
+use crate::permission::SecurityMode;
+use crate::permission::ask::AskSender;
+use crate::permission::checker::PermCheck;
+use crate::provider::{AnyAgent, AnyClient};
+use crate::sandbox::Sandbox;
+use crate::session::{MessageRole, Session};
+use crate::ui::events::{format_time, render_session};
+use crate::ui::input::InputEditor;
+use crate::ui::renderer::Renderer;
+
+const C_AGENT: Color = Color::White;
+const C_RESULT: Color = Color::DarkGrey;
+const C_ERROR: Color = Color::Red;
+
+pub fn undo_last(session: &mut Session) -> usize {
+    let len = session.messages.len();
+    if len == 0 {
+        return 0;
+    }
+    if session.messages[len - 1].role == MessageRole::Assistant {
+        session.messages.pop();
+        if session
+            .messages
+            .last()
+            .is_some_and(|m| m.role == MessageRole::User)
+        {
+            session.messages.pop();
+            return 2;
+        }
+        return 1;
+    }
+    if session.messages[len - 1].role == MessageRole::User {
+        session.messages.pop();
+        return 1;
+    }
+    0
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_compress(
+    instructions: Option<&str>,
+    agent: &mut AnyAgent,
+    client: &AnyClient,
+    renderer: &mut Renderer,
+    session: &mut Session,
+    cli: &Cli,
+    cfg: &Config,
+    context: &mut ContextFiles,
+    reasoning_enabled: bool,
+    permission: &Option<PermCheck>,
+    ask_tx: &Option<AskSender>,
+    sandbox: &Sandbox,
+) -> anyhow::Result<()> {
+    renderer.write_line("compressing...", C_AGENT)?;
+    renderer.write_line("", Color::White)?;
+
+    let reserve = cfg.resolve_reserve_tokens();
+    let keep_recent = cfg.resolve_keep_recent_tokens();
+    let max_tokens = session.context_window.saturating_sub(reserve);
+
+    if session.total_estimated_tokens <= max_tokens {
+        renderer.write_line("context within limits, no compression needed", C_AGENT)?;
+        return Ok(());
+    }
+
+    let mut accumulated = 0u64;
+    let mut cut_idx = session.messages.len();
+    for (i, msg) in session.messages.iter().enumerate().rev() {
+        if accumulated >= keep_recent {
+            cut_idx = i + 1;
+            break;
+        }
+        accumulated = accumulated.saturating_add(msg.estimated_tokens);
+    }
+
+    if cut_idx == 0 {
+        renderer.write_line("nothing to compress (entire context is recent)", C_AGENT)?;
+        return Ok(());
+    }
+
+    let messages_to_summarize = &session.messages[..cut_idx];
+    let previous_summary = session.compactions.last().map(|c| c.summary.as_str());
+
+    let summary = client
+        .compress_messages(
+            &session.model,
+            messages_to_summarize,
+            previous_summary,
+            instructions,
+        )
+        .await?;
+
+    let tokens_before: u64 = messages_to_summarize
+        .iter()
+        .map(|m| m.estimated_tokens)
+        .sum();
+
+    session.compress(summary, cut_idx, tokens_before);
+
+    let model = client.completion_model(session.model.to_string());
+    *agent = crate::provider::build_agent(
+        model,
+        cli,
+        cfg,
+        context,
+        permission.clone(),
+        ask_tx.clone(),
+        sandbox.clone(),
+        reasoning_enabled,
+    )
+    .await;
+    renderer.write_line("prompt cleared (back to default behavior)", C_AGENT)?;
+
+    render_session(renderer, session, cli, cfg, context)?;
+    renderer.write_line(
+        &format!(
+            "compressed {} messages (saved ~{} tokens)",
+            cut_idx, tokens_before,
+        ),
+        C_AGENT,
+    )?;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_slash(
+    text: &str,
+    agent: &mut AnyAgent,
+    client: &mut AnyClient,
+    renderer: &mut Renderer,
+    session: &mut Session,
+    cli: &Cli,
+    cfg: &Config,
+    context: &mut ContextFiles,
+    show_reasoning: &mut bool,
+    reasoning_enabled: &mut bool,
+    is_running: &mut bool,
+    input: &mut InputEditor,
+    permission: &Option<PermCheck>,
+    ask_tx: &Option<AskSender>,
+    todo_tools_enabled: &mut bool,
+    sandbox: &Sandbox,
+) -> anyhow::Result<()> {
+    let parts: SmallVec<[&str; 3]> = text.trim().splitn(3, ' ').collect();
+    match parts[0] {
+        "/model" => {
+            if parts.len() < 2 {
+                renderer.write_line(&format!("current model: {}", session.model), C_AGENT)?;
+            } else {
+                let new_model = CompactString::new(parts[1].trim());
+                let model = client.completion_model(new_model.to_string());
+                *agent = crate::provider::build_agent(
+                    model,
+                    cli,
+                    cfg,
+                    context,
+                    permission.clone(),
+                    ask_tx.clone(),
+                    sandbox.clone(),
+                    *reasoning_enabled,
+                )
+                .await;
+                session.model = new_model.clone();
+                session.provider = CompactString::new(cli.resolve_provider(cfg).label());
+                renderer.write_line(&format!("switched to model: {}", new_model), C_AGENT)?;
+            }
+        }
+        "/provider" => {
+            if parts.len() < 2 {
+                renderer.write_line(
+                    &format!(
+                        "current provider: {} (model: {})",
+                        session.provider, session.model
+                    ),
+                    C_AGENT,
+                )?;
+                renderer.write_line(
+                    "available: openrouter, openai, anthropic, gemini, groq, ollama, custom",
+                    C_RESULT,
+                )?;
+            } else {
+                let name = parts[1].trim();
+                let kind = match crate::provider::ProviderKind::from_str(name) {
+                    Some(k) => k,
+                    None => {
+                        renderer.write_line(
+                            &format!("unknown provider: {} (try openrouter|openai|anthropic|gemini|groq|ollama|custom)", name),
+                            C_ERROR,
+                        )?;
+                        return Ok(());
+                    }
+                };
+                let model_name = parts
+                    .get(2)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|| kind.default_model().to_string());
+                if model_name.is_empty() {
+                    renderer.write_line(
+                        &format!("provider {} requires an explicit model: /provider {} <model>", kind.label(), kind.label()),
+                        C_ERROR,
+                    )?;
+                    return Ok(());
+                }
+                let new_client = match crate::provider::create_client(kind, cli.api_key.as_deref()) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        renderer.write_line(&format!("provider switch failed: {}", e), C_ERROR)?;
+                        return Ok(());
+                    }
+                };
+                let model = new_client.completion_model(model_name.clone());
+                *agent = crate::provider::build_agent(
+                    model,
+                    cli,
+                    cfg,
+                    context,
+                    permission.clone(),
+                    ask_tx.clone(),
+                    sandbox.clone(),
+                    *reasoning_enabled,
+                )
+                .await;
+                *client = new_client;
+                session.model = CompactString::new(&model_name);
+                session.provider = CompactString::new(kind.label());
+                renderer.write_line(
+                    &format!("switched to provider: {} (model: {})", kind.label(), model_name),
+                    C_AGENT,
+                )?;
+            }
+        }
+        "/sessions" => {
+            if parts.len() < 2 {
+                let sessions = crate::session::storage::find_recent_sessions(20)?;
+                if sessions.is_empty() {
+                    renderer.write_line("no saved sessions", C_AGENT)?;
+                } else {
+                    renderer
+                        .write_line(&format!("recent sessions ({}):", sessions.len()), C_AGENT)?;
+                    for s in &sessions {
+                        let last = s
+                            .messages
+                            .last()
+                            .map(|m| {
+                                format!("...{}", &m.content.chars().take(30).collect::<String>())
+                            })
+                            .unwrap_or_default();
+                        let time = format_time(&s.updated_at);
+                        renderer.write_line(
+                            &format!(
+                                "  {}  {}  {}msgs  {}  {}",
+                                &s.id[..8],
+                                time,
+                                s.messages.len(),
+                                s.model,
+                                last
+                            ),
+                            C_RESULT,
+                        )?;
+                    }
+                }
+            } else if parts[1] == "delete" && parts.len() >= 3 {
+                let prefix = parts[2].trim();
+                let sessions = crate::session::storage::find_sessions_by_prefix(prefix)?;
+                if sessions.is_empty() {
+                    renderer.write_line(&format!("no session matching '{}'", prefix), C_AGENT)?;
+                } else if sessions.len() == 1 {
+                    if let Some(s) = sessions.into_iter().next() {
+                        let id = s.id.clone();
+                        let preview = s
+                            .messages
+                            .last()
+                            .map(|m| {
+                                format!("...{}", &m.content.chars().take(40).collect::<String>())
+                            })
+                            .unwrap_or_default();
+                        if let Err(e) = crate::session::storage::delete_session(&id) {
+                            renderer.write_line(&format!("failed to delete: {}", e), C_ERROR)?;
+                        } else {
+                            renderer.write_line(
+                                &format!("deleted session {} {}", &id[..8], preview),
+                                C_AGENT,
+                            )?;
+                        }
+                    }
+                } else {
+                    renderer.write_line(
+                        &format!("multiple sessions match '{}', be more specific", prefix),
+                        C_AGENT,
+                    )?;
+                    for s in &sessions {
+                        let last = s
+                            .messages
+                            .last()
+                            .map(|m| {
+                                format!("...{}", &m.content.chars().take(30).collect::<String>())
+                            })
+                            .unwrap_or_default();
+                        let time = format_time(&s.updated_at);
+                        renderer.write_line(
+                            &format!(
+                                "  {}  {}  {}msgs  {}  {}",
+                                &s.id[..8],
+                                time,
+                                s.messages.len(),
+                                s.model,
+                                last
+                            ),
+                            C_RESULT,
+                        )?;
+                    }
+                }
+            } else {
+                let prefix = parts[1].trim();
+                let sessions = crate::session::storage::find_sessions_by_prefix(prefix)?;
+                if sessions.is_empty() {
+                    renderer.write_line(&format!("no session matching '{}'", prefix), C_AGENT)?;
+                } else if sessions.len() == 1 {
+                    if let Some(s) = sessions.into_iter().next() {
+                        let msg_count = s.messages.len();
+                        *session = s;
+                        render_session(renderer, session, cli, cfg, context)?;
+                        renderer
+                            .write_line(&format!("loaded session ({} msgs)", msg_count), C_AGENT)?;
+                    }
+                } else {
+                    renderer
+                        .write_line(&format!("multiple sessions match '{}':", prefix), C_AGENT)?;
+                    for s in &sessions {
+                        let last = s
+                            .messages
+                            .last()
+                            .map(|m| {
+                                format!("...{}", &m.content.chars().take(30).collect::<String>())
+                            })
+                            .unwrap_or_default();
+                        let time = format_time(&s.updated_at);
+                        renderer.write_line(
+                            &format!(
+                                "  {}  {}  {}msgs  {}  {}",
+                                &s.id[..8],
+                                time,
+                                s.messages.len(),
+                                s.model,
+                                last
+                            ),
+                            C_RESULT,
+                        )?;
+                    }
+                }
+            }
+        }
+        "/reasoning" | "/thinking" => {
+            *reasoning_enabled = !*reasoning_enabled;
+            *show_reasoning = *reasoning_enabled;
+            let model = client.completion_model(session.model.to_string());
+            *agent = crate::provider::build_agent(
+                model,
+                cli,
+                cfg,
+                context,
+                permission.clone(),
+                ask_tx.clone(),
+                sandbox.clone(),
+                *reasoning_enabled,
+            )
+            .await;
+            renderer.write_line(
+                &format!(
+                    "reasoning: {}",
+                    if *reasoning_enabled { "on" } else { "off" }
+                ),
+                C_AGENT,
+            )?;
+        }
+        "/mode" => {
+            let current_mode = permission
+                .as_ref()
+                .map(|p| p.lock().unwrap_or_else(|e| e.into_inner()).mode())
+                .unwrap_or(SecurityMode::Standard);
+
+            if parts.len() < 2 {
+                renderer.write_line("security mode:", C_AGENT)?;
+                renderer.write_line(&format!("  current: {}", current_mode), C_RESULT)?;
+                renderer.write_line("", C_AGENT)?;
+                renderer.write_line(
+                    "  /mode standard      use configured permission rules",
+                    C_RESULT,
+                )?;
+                renderer.write_line("  /mode restrictive   default all tools to ask", C_RESULT)?;
+                renderer.write_line(
+                    "  /mode accept        auto-accept within working directory",
+                    C_RESULT,
+                )?;
+                renderer
+                    .write_line("  /mode yolo          auto-accept ALL operations", C_RESULT)?;
+                renderer.write_line("", C_AGENT)?;
+            } else {
+                match parts[1] {
+                    "standard" => {
+                        if let Some(p) = permission {
+                            p.lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .set_mode(SecurityMode::Standard);
+                            renderer.write_line("security mode: standard", C_AGENT)?;
+                        } else {
+                            renderer.write_line("permission system not active", C_ERROR)?;
+                        }
+                    }
+                    "restrictive" => {
+                        if let Some(p) = permission {
+                            p.lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .set_mode(SecurityMode::Restrictive);
+                            renderer.write_line("security mode: restrictive", C_AGENT)?;
+                        } else {
+                            renderer.write_line("permission system not active", C_ERROR)?;
+                        }
+                    }
+                    "accept" => {
+                        if let Some(p) = permission {
+                            p.lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .set_mode(SecurityMode::Accept);
+                            renderer.write_line(
+                                "security mode: accept (auto-allow within CWD)",
+                                C_AGENT,
+                            )?;
+                        } else {
+                            renderer.write_line("permission system not active", C_ERROR)?;
+                        }
+                    }
+                    "yolo" => {
+                        if let Some(p) = permission {
+                            p.lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .set_mode(SecurityMode::Yolo);
+                            renderer.write_line(
+                                "security mode: YOLO (all operations allowed)",
+                                C_AGENT,
+                            )?;
+                        } else {
+                            renderer.write_line("permission system not active", C_ERROR)?;
+                        }
+                    }
+                    _ => {
+                        renderer.write_line(&format!("unknown mode: {}", parts[1]), C_ERROR)?;
+                    }
+                }
+            }
+        }
+        "/toggle" => {
+            if parts.len() < 2 {
+                renderer.write_line("usage: /toggle <feature> [on|off]", C_AGENT)?;
+                renderer.write_line("features:", C_AGENT)?;
+                renderer.write_line(
+                    &format!("  todo  {}", if *todo_tools_enabled { "on" } else { "off" }),
+                    C_RESULT,
+                )?;
+            } else {
+                let new_state = match parts.get(2).copied() {
+                    Some("on") => true,
+                    Some("off") => false,
+                    Some(other) => {
+                        renderer
+                            .write_line(&format!("invalid: '{}', use on or off", other), C_ERROR)?;
+                        return Ok(());
+                    }
+                    None => !*todo_tools_enabled,
+                };
+                if new_state == *todo_tools_enabled {
+                    renderer.write_line(
+                        &format!(
+                            "todo tools already {}",
+                            if new_state { "on" } else { "off" }
+                        ),
+                        C_AGENT,
+                    )?;
+                } else {
+                    *todo_tools_enabled = new_state;
+                    let model = client.completion_model(session.model.to_string());
+                    *agent = crate::provider::build_agent(
+                        model,
+                        cli,
+                        cfg,
+                        context,
+                        permission.clone(),
+                        ask_tx.clone(),
+                        sandbox.clone(),
+                        *reasoning_enabled,
+                    )
+                    .await;
+                    renderer.write_line(
+                        &format!(
+                            "todo tools: {}",
+                            if *todo_tools_enabled { "on" } else { "off" }
+                        ),
+                        C_AGENT,
+                    )?;
+                }
+            }
+        }
+        "/compress" | "/compact" => {
+            let instructions = if parts.len() > 1 {
+                Some(parts[1..].join(" "))
+            } else {
+                None
+            };
+            let instr_str = instructions.clone().unwrap_or_default();
+            return Err(anyhow::anyhow!("DEFER_COMPRESS:{}", instr_str));
+        }
+        "/prompt" => {
+            let mut sorted: Vec<&String> = context.prompts.keys().collect();
+            sorted.sort();
+            if parts.len() < 2 {
+                if sorted.is_empty() {
+                    renderer.write_line("no prompts available", C_AGENT)?;
+                } else {
+                    let current = context.current_prompt_name.as_deref().unwrap_or("(none)");
+                    renderer.write_line(
+                        &format!("available prompts (current: {}):", current),
+                        C_AGENT,
+                    )?;
+                    for name in &sorted {
+                        renderer.write_line(&format!("  {}", name), C_RESULT)?;
+                    }
+                    renderer.write_line("", C_AGENT)?;
+                    renderer.write_line("usage: /prompt <name>  |  /prompt default", C_RESULT)?;
+                }
+            } else if parts[1] == "default" {
+                if context.current_prompt.is_none() {
+                    renderer.write_line("no active prompt to clear", C_AGENT)?;
+                } else {
+                    context.current_prompt = None;
+                    context.current_prompt_name = None;
+                    let model = client.completion_model(session.model.to_string());
+                    *agent = crate::provider::build_agent(
+                        model,
+                        cli,
+                        cfg,
+                        context,
+                        permission.clone(),
+                        ask_tx.clone(),
+                        sandbox.clone(),
+                        *reasoning_enabled,
+                    )
+                    .await;
+                }
+            } else {
+                let name = parts[1].trim();
+                if let Some(content) = context.prompts.get(name) {
+                    context.current_prompt = Some(content.clone());
+                    context.current_prompt_name = Some(name.to_string());
+                    let model = client.completion_model(session.model.to_string());
+                    *agent = crate::provider::build_agent(
+                        model,
+                        cli,
+                        cfg,
+                        context,
+                        permission.clone(),
+                        ask_tx.clone(),
+                        sandbox.clone(),
+                        *reasoning_enabled,
+                    )
+                    .await;
+                    renderer.write_line(&format!("active prompt: {}", name), C_AGENT)?;
+                } else {
+                    renderer.write_line(&format!("unknown prompt: '{}'", name), C_ERROR)?;
+                    if !sorted.is_empty() {
+                        renderer.write_line("available prompts:", C_AGENT)?;
+                        for p in &sorted {
+                            renderer.write_line(&format!("  {}", p), C_RESULT)?;
+                        }
+                    }
+                }
+            }
+        }
+        "/regen-prompts" => match crate::context::prompts::regen() {
+            Ok(()) => {
+                context.prompts = crate::context::prompts::load();
+                renderer.write_line("default prompts regenerated", C_AGENT)?;
+            }
+            Err(e) => {
+                renderer.write_line(&format!("failed to regenerate prompts: {}", e), C_ERROR)?;
+            }
+        },
+        "/history" => match crate::session::chat_history::load_history() {
+            Ok(entries) => {
+                if entries.is_empty() {
+                    renderer.write_line("no chat history", C_AGENT)?;
+                } else {
+                    renderer.write_line(
+                        &format!("global chat history ({} entries):", entries.len()),
+                        C_AGENT,
+                    )?;
+                    for entry in entries.iter().rev().take(10).rev() {
+                        let preview: String = entry.content.chars().take(80).collect();
+                        renderer.write_line(&format!("  {}", preview), C_RESULT)?;
+                    }
+                    if entries.len() > 10 {
+                        renderer.write_line("  ... (showing last 10)", C_AGENT)?;
+                    }
+                }
+            }
+            Err(e) => {
+                renderer.write_line(&format!("failed to load chat history: {}", e), C_ERROR)?;
+            }
+        },
+        "/quit" => {
+            *is_running = false;
+            return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "quit").into());
+        }
+        "/clear" => {
+            session.messages.clear();
+            session.total_estimated_tokens = 0;
+            session.compactions.clear();
+            render_session(renderer, session, cli, cfg, context)?;
+        }
+        "/undo" => {
+            let removed = undo_last(session);
+            if removed > 0 {
+                render_session(renderer, session, cli, cfg, context)?;
+                renderer.write_line(&format!("removed {} message(s)", removed), C_AGENT)?;
+            } else {
+                renderer.write_line("nothing to undo", C_AGENT)?;
+            }
+        }
+        "/retry" => {
+            let last_user = session
+                .messages
+                .iter()
+                .rev()
+                .find(|m| m.role == MessageRole::User)
+                .cloned();
+            match last_user {
+                Some(msg) => {
+                    input.buffer = msg.content.clone();
+                    input.cursor = msg.content.len();
+                    renderer.write_line("edit last message and press Enter to retry", C_AGENT)?;
+                }
+                None => {
+                    renderer.write_line("no previous message to retry", C_AGENT)?;
+                }
+            }
+        }
+        "/help" => {
+            renderer.write_line("commands:", C_AGENT)?;
+            renderer.write_line("  /model [name]          show or switch model", C_RESULT)?;
+            renderer.write_line(
+                "  /provider [name] [m]   show or switch provider (openrouter|openai|anthropic|gemini|groq|ollama|custom)",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /sessions              list recent sessions", C_RESULT)?;
+            renderer.write_line(
+                "  /sessions <id>         load a session (by ID prefix)",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /sessions delete <id>  delete a session", C_RESULT)?;
+            renderer.write_line(
+                "  /reasoning             toggle LLM reasoning ability",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /thinking              alias for /reasoning", C_RESULT)?;
+            renderer.write_line(
+                "  /mode                  show/change security mode",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  /mode <mode>           set mode (standard|restrictive|accept|yolo)",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /clear                 clear screen", C_RESULT)?;
+            renderer.write_line("  /undo                  undo last exchange", C_RESULT)?;
+            renderer.write_line("  /retry                 retry last prompt", C_RESULT)?;
+            renderer.write_line(
+                "  /compress [/compact]   compress conversation history",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  /compress [instr]      compress with custom instructions",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  /pentest <scope>       run authorized pentest pipeline in-session",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /prompt                list available prompts", C_RESULT)?;
+            renderer.write_line("  /prompt <name>         activate a prompt", C_RESULT)?;
+            renderer.write_line("  /prompt default        clear active prompt", C_RESULT)?;
+            renderer.write_line(
+                "  /regen-prompts        restore built-in prompts to global dir",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  /history               show global chat history",
+                C_RESULT,
+            )?;
+            renderer.write_line("  /quit                  exit hex", C_RESULT)?;
+            renderer.write_line("  /help                  show this message", C_RESULT)?;
+            renderer.write_line("", C_AGENT)?;
+            renderer.write_line("keys:", C_AGENT)?;
+            renderer.write_line("  PgUp/PgDn             scroll chat history", C_RESULT)?;
+            renderer.write_line("  Home/End               jump to top/bottom", C_RESULT)?;
+            renderer.write_line(
+                "  @<query>               file picker (Tab/Enter select, Esc cancel)",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  mouse drag             select text (copies to clipboard on release)",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  Esc (while selected)   clear selection (no copy)",
+                C_RESULT,
+            )?;
+            renderer.write_line("  Ctrl+R                 toggle reasoning", C_RESULT)?;
+            renderer.write_line("  Ctrl+C / Ctrl+D        interrupt/quit", C_RESULT)?;
+            renderer.write_line("  mouse scroll           scroll chat", C_RESULT)?;
+        }
+        "/pentest" => {
+            if parts.len() < 2 {
+                renderer.write_line(
+                    "usage: /pentest <scope1,scope2,...> [report=<path>]",
+                    C_AGENT,
+                )?;
+                renderer.write_line("example: /pentest example.com,api.example.com", C_RESULT)?;
+                renderer.write_line("       /pentest example.com report=./report.md", C_RESULT)?;
+                return Ok(());
+            }
+            let rest = parts[1..].join(" ");
+            let mut scope_tokens: Vec<String> = Vec::new();
+            let mut report_override: Option<std::path::PathBuf> = None;
+            for tok in rest.split_whitespace() {
+                if let Some(p) = tok.strip_prefix("report=") {
+                    report_override = Some(std::path::PathBuf::from(p));
+                } else {
+                    scope_tokens.push(tok.to_string());
+                }
+            }
+            let policy = match crate::pentest::engagement::EngagementPolicy::from_parts(
+                &scope_tokens,
+                &[],
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    renderer.write_line(&format!("pentest: {}", e), C_ERROR)?;
+                    return Ok(());
+                }
+            };
+            renderer.write_line(
+                &format!(
+                    "pentest authorized — scope: {}",
+                    policy.target_scope.join(", ")
+                ),
+                C_AGENT,
+            )?;
+            renderer.write_line(
+                &format!("rules: {} rule(s)", policy.rules_of_engagement.len()),
+                C_RESULT,
+            )?;
+
+            let report_path = report_override.unwrap_or_else(|| cli.resolve_report_path(cfg));
+            let evidence_path = report_path.with_extension("evidence.jsonl");
+
+            let mut evidence = match crate::pentest::evidence::EvidenceLog::open(&evidence_path) {
+                Ok(e) => e,
+                Err(e) => {
+                    renderer.write_line(&format!("pentest: evidence log error: {}", e), C_ERROR)?;
+                    return Ok(());
+                }
+            };
+
+            let pentest_preamble = crate::agent::builder::compose_pentest_preamble(
+                context,
+                &policy.target_scope,
+                &policy.rules_of_engagement,
+            );
+            let pmodel = client.completion_model(session.model.to_string());
+
+            let policy_handle = crate::agent::tools::sec::new_policy_handle();
+            *policy_handle.write().unwrap() = Some(policy.clone());
+            let evidence_sink =
+                crate::agent::tools::sec::EvidenceSink::with_path(evidence_path.clone());
+            let sec_ctx = crate::agent::tools::sec::SecContext::new(
+                policy_handle,
+                evidence_sink,
+                sandbox.clone(),
+                permission.clone(),
+                ask_tx.clone(),
+            );
+
+            let pentest_agent = crate::agent::builder::build_agent_with_preamble(
+                pmodel,
+                cli,
+                cfg,
+                &pentest_preamble,
+                permission.clone(),
+                ask_tx.clone(),
+                sandbox.clone(),
+                Some(sec_ctx),
+            );
+
+            let mut executor = crate::pentest::agent_executor::AgentExecutor::new(pentest_agent);
+
+            renderer.write_line(
+                "running pentest pipeline (recon → validate → assess)...",
+                C_AGENT,
+            )?;
+            match crate::pentest::pipeline::run(&policy, &mut executor, &mut evidence, &report_path)
+                .await
+            {
+                Ok(out) => {
+                    renderer.write_line(
+                        &format!(
+                            "pentest complete: {} finding(s) -> {}",
+                            out.findings.len(),
+                            out.report_path.display()
+                        ),
+                        C_AGENT,
+                    )?;
+                    renderer.write_line(
+                        &format!("evidence log: {}", evidence_path.display()),
+                        C_RESULT,
+                    )?;
+                }
+                Err(e) => {
+                    renderer.write_line(&format!("pentest failed: {}", e), C_ERROR)?;
+                }
+            }
+        }
+        _ => {
+            renderer.write_line(
+                &format!("unknown command: {} (try /help)", parts[0]),
+                C_ERROR,
+            )?;
+        }
+    }
+    Ok(())
+}

@@ -62,7 +62,7 @@
 - **Authorized pentest pipeline** with hard scope guards, evidence log, Validator A–D, Scorecard (Wilson lower-bound), and cost budget.
 - **Slash commands** for in-session control: `/provider`, `/model`, `/mode`, `/compress`, `/pentest`, `/sessions`, etc.
 - **Persistent sessions** under `~/.local/share/hex/sessions/` with token-aware auto-compaction.
-- **Hardened systemd deployment** + GitHub Actions GitOps pipeline.
+- **GitHub Actions GitOps pipeline** for building and deploying the `hex` CLI to an Ubuntu server.
 
 ---
 
@@ -601,11 +601,10 @@ CLI flags `--provider <name> --model <id>` set the initial state.
                                    │
                                    ▼
                        ┌─────────────────────────┐
-                       │ Ubuntu server:          │
+                       │ Ubuntu server (as root):│
                        │  • install /usr/local/bin/hex
                        │  • run install-tools.sh  (40+ tools)
-                       │  • install systemd unit  (hex-agent.service)
-                       │  • systemctl restart     (oneshot health gate)
+                       │  • hex --version sanity check
                        └─────────────────────────┘
 ```
 
@@ -621,9 +620,8 @@ hex-agent/
 ├── README.md                  ← this file
 ├── ARCHITECTURE.md            ← deep dive
 ├── install-tools.sh           ← Kali toolset installer (Ubuntu)
-├── deploy/                    ← systemd + remote deploy script
+├── deploy/                    ← remote deploy script
 │   ├── deploy.sh
-│   ├── hex-agent.service
 │   └── README.md
 ├── .github/workflows/
 │   └── build-deploy.yml       ← GitOps pipeline

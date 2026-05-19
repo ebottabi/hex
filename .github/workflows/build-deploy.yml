@@ -60,7 +60,6 @@ jobs:
           mkdir -p dist
           cp "target/release/$BIN_NAME" "dist/$BIN_NAME"
           cp install-tools.sh dist/
-          cp deploy/hex-agent.service dist/
           cp deploy/deploy.sh dist/
           cd dist
           sha256sum "$BIN_NAME" install-tools.sh > SHA256SUMS
@@ -136,4 +135,4 @@ jobs:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          ssh "$USER@$HOST" 'hex --version && systemctl is-active hex-agent || true'
+          ssh "$USER@$HOST" 'hex --version'

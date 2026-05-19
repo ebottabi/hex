@@ -98,6 +98,8 @@ fi
 log "updating apt and installing base packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
+
+# Required packages (build/runtime essentials and widely-available tools).
 apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip build-essential pkg-config \
     python3 python3-pip python3-venv pipx \
@@ -106,9 +108,20 @@ apt-get install -y --no-install-recommends \
     libssl-dev libffi-dev libpcap-dev \
     nmap masscan whatweb nikto sqlmap dirb gobuster ffuf \
     hydra john hashcat \
-    tshark suricata zeek \
-    radare2 \
+    tshark \
     libimage-exiftool-perl
+
+# Optional packages — install one-by-one so a missing candidate (e.g. on
+# Ubuntu Jammy where radare2/zeek/suricata aren't in the default repos) does
+# not abort the whole installer. Operators can layer extra repos for these.
+OPTIONAL_APT=(suricata zeek radare2)
+for pkg in "${OPTIONAL_APT[@]}"; do
+    if apt-get install -y --no-install-recommends "$pkg" >/dev/null 2>&1; then
+        ok "$pkg (apt)"
+    else
+        warn "$pkg not available via apt — skipping (install manually if needed)"
+    fi
+done
 
 ok "apt base done"
 

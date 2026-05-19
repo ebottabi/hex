@@ -285,7 +285,7 @@ mod tests {
         ctx.current_prompt_name = Some("code".to_string());
         ctx.current_prompt = Some("ACTIVE-CONTEXT".to_string());
         let p = compose_preamble(&ctx, false);
-        assert!(p.contains("expert coding"));
+        assert!(p.contains("hex-agent"));
         assert!(p.contains("AGENTS-CONTEXT"));
         assert!(p.contains("ACTIVE-CONTEXT"));
         assert!(p.contains("---"));
@@ -304,6 +304,7 @@ mod tests {
     fn preamble_uses_default_system_prompt() {
         let ctx = empty_context();
         let p = compose_preamble(&ctx, false);
-        assert!(p.contains("expert coding"));
+        assert!(p.contains("hex-agent"));
+        assert!(p.contains("offensive-security operator"));
     }
 }

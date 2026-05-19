@@ -90,7 +90,6 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment:
       name: production
-      url: ssh://${{ secrets.DEPLOY_HOST }}
     concurrency:
       group: deploy-production
       cancel-in-progress: false

@@ -27,8 +27,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.86.0"
           components: clippy, rustfmt
 
       - name: Cache cargo
@@ -47,7 +48,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings || true
 
       - name: cargo test
-        run: cargo test --release --all
+        run: cargo test --release --locked --all
 
       - name: cargo build --release
         run: cargo build --release --locked --bin "$BIN_NAME"

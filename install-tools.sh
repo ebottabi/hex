@@ -128,14 +128,60 @@ ok "apt base done"
 # Ensure pipx path for the calling user
 as_user "pipx ensurepath >/dev/null 2>&1 || true"
 
-# --- 2. golang tools (ProjectDiscovery + amass) ------------------------------
+# --- 2. golang toolchain + tools (ProjectDiscovery + amass) ------------------
+
+# Ubuntu 22.04 ships Go 1.18; current ProjectDiscovery tools (subfinder ≥ 2.14)
+# require Go ≥ 1.22. Detect the system Go version and install upstream Go to
+# /usr/local/go when too old. Idempotent.
+ensure_go() {
+    local needed_major=1 needed_minor=22
+    local cur_major=0 cur_minor=0
+    if have go; then
+        local raw
+        raw=$(go version 2>/dev/null | awk '{print $3}' | sed 's/^go//')
+        cur_major=${raw%%.*}
+        local rest=${raw#*.}
+        cur_minor=${rest%%.*}
+    fi
+    if [[ "$cur_major" -gt "$needed_major" ]] || \
+       { [[ "$cur_major" -eq "$needed_major" ]] && [[ "$cur_minor" -ge "$needed_minor" ]]; }; then
+        ok "go ${cur_major}.${cur_minor} ok"
+        return
+    fi
+    log "system go is ${cur_major}.${cur_minor} (< ${needed_major}.${needed_minor}) — installing upstream Go"
+    local goversion="1.22.10"
+    local arch
+    case "$(uname -m)" in
+        x86_64)  arch=amd64 ;;
+        aarch64) arch=arm64 ;;
+        *)       err "unsupported arch $(uname -m)"; exit 1 ;;
+    esac
+    local tarball="go${goversion}.linux-${arch}.tar.gz"
+    local url="https://go.dev/dl/${tarball}"
+    local tmp
+    tmp=$(mktemp -d)
+    curl -fsSL "$url" -o "$tmp/$tarball"
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf "$tmp/$tarball"
+    rm -rf "$tmp"
+    # System-wide PATH for login shells.
+    cat >/etc/profile.d/go.sh <<'EOF'
+export PATH="/usr/local/go/bin:${PATH}"
+EOF
+    chmod 0644 /etc/profile.d/go.sh
+    # Make it visible to the rest of this script.
+    export PATH="/usr/local/go/bin:${PATH}"
+    ok "go $(go version | awk '{print $3}') installed at /usr/local/go"
+}
+
+ensure_go
 if ! have go; then err "go missing — aborting"; exit 1; fi
 
 install_go() {
     local pkg="$1" bin="$2"
     if have "$bin"; then ok "$bin already installed"; return; fi
     log "go install $pkg"
-    as_user "GOPATH=$REAL_HOME/go GOBIN=$GO_BIN go install $pkg@latest"
+    as_user "PATH=/usr/local/go/bin:\$PATH GOPATH=$REAL_HOME/go GOBIN=$GO_BIN go install $pkg@latest"
     ln -sf "$GO_BIN/$bin" "/usr/local/bin/$bin"
     ok "$bin installed"
 }

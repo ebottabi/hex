@@ -18,8 +18,8 @@ env:
 
 jobs:
   build:
-    name: Build (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Build (ubuntu-22.04)
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.meta.outputs.version }}
       sha: ${{ steps.meta.outputs.sha }}
@@ -81,7 +81,7 @@ jobs:
 
   deploy:
     name: Deploy to server
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: build
     if: |
       (github.event_name == 'workflow_dispatch' && fromJSON(inputs.deploy)) ||

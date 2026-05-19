@@ -101,6 +101,14 @@ impl Cli {
         let mut args = owned.into_iter();
         while let Some(arg) = args.next() {
             match arg.as_str() {
+                "-V" | "--version" => {
+                    println!("hex {}", env!("CARGO_PKG_VERSION"));
+                    std::process::exit(0);
+                }
+                "-h" | "--help" => {
+                    print_help();
+                    std::process::exit(0);
+                }
                 "-p" | "--print" => {
                     print = true;
                     mode = RuntimeMode::Print;
@@ -236,6 +244,10 @@ impl Cli {
         }
     }
 
+    pub fn version() -> &'static str {
+        env!("CARGO_PKG_VERSION")
+    }
+
     pub fn resolve_model(&self, cfg: &Config) -> String {
         self.model
             .clone()
@@ -300,6 +312,65 @@ impl Cli {
             SecurityMode::Standard
         }
     }
+}
+
+fn print_help() {
+    println!(
+        "hex {version}
+A senior coding assistant and authorized offensive-security operator.
+
+USAGE:
+    hex [OPTIONS] [MESSAGE...]
+
+GENERAL:
+    -h, --help                 Show this help and exit
+    -V, --version              Show version and exit
+    -p, --print                Single-shot: send MESSAGE, print reply, exit
+        --print-config         Print effective configuration and exit
+    -c, --continue             Continue the most recent session
+    -r, --resume               Pick a session to resume
+        --session <id>         Resume a specific session id
+        --no-session           Do not persist this session
+        --no-color             Disable ANSI colour
+    -n, --no-context-files     Do not auto-load AGENTS.md / CLAUDE.md / etc.
+
+PROVIDER / MODEL:
+        --provider <name>      openai | anthropic | gemini | groq |
+                               openrouter | ollama | custom
+        --model <name>         Model id for the chosen provider
+        --api-key <key>        Override the env-var API key
+        --max-tokens <n>       Cap response tokens (default 8192)
+        --max-agent-turns <n>  Tool-call loop cap (default 100)
+        --temperature <f>      Sampling temperature
+        --prompt <name>        Named prompt preset under prompts/
+
+TOOLS / PERMISSIONS:
+    -t, --tools <name>         Restrict tools to this set (repeatable)
+        --no-tools             Disable tool calling
+    -R, --restrictive          Ask before every tool call
+        --accept-all           Auto-approve safe tool calls
+        --yolo                 Auto-approve everything (dangerous)
+        --sandbox              Run in sandboxed cwd
+        --shell <bin>          Shell used for the bash tool (default bash)
+
+PENTEST (authorized only):
+        --authorized-pentest   Enable security tool registry + pentest prompt
+        --pentest              One-shot pentest pipeline mode
+        --scope <a,b,c>        Comma-separated targets (hosts/CIDRs/domains)
+        --roe <text>           Rule of engagement note (repeatable)
+        --report <path>        Output markdown report path
+        --max-cost <usd>       Spend cap (default unlimited)
+
+EXAMPLES:
+    hex                                                    # interactive
+    hex --provider groq --model llama-3.3-70b-versatile
+    hex -p \"refactor src/foo.rs to remove unwrap()\"
+    hex --authorized-pentest --scope example.com \\
+        --report ./report.md --max-cost 5.00
+
+See README.md for the full agent architecture.",
+        version = env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[cfg(test)]

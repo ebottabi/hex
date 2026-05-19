@@ -202,7 +202,15 @@ fn scan_outputs(dir: &str) -> (Vec<String>, BTreeMap<String, u64>) {
 }
 
 fn category_from_name(name: &str) -> Option<String> {
-    for cat in ["users", "computers", "groups", "domains", "gpos", "ous", "containers"] {
+    for cat in [
+        "users",
+        "computers",
+        "groups",
+        "domains",
+        "gpos",
+        "ous",
+        "containers",
+    ] {
         if name.contains(cat) {
             return Some(cat.to_string());
         }
@@ -221,9 +229,8 @@ mod tests {
         let p = dir.path();
         for (file, count) in [("users_20240101.json", 3), ("computers_20240101.json", 2)] {
             let mut f = std::fs::File::create(p.join(file)).unwrap();
-            let items: Vec<serde_json::Value> = (0..count)
-                .map(|i| serde_json::json!({"i": i}))
-                .collect();
+            let items: Vec<serde_json::Value> =
+                (0..count).map(|i| serde_json::json!({"i": i})).collect();
             writeln!(f, "{}", serde_json::json!({"data": items})).unwrap();
         }
         let (files, counts) = scan_outputs(p.to_str().unwrap());

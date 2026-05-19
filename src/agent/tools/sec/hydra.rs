@@ -165,7 +165,9 @@ fn extract_attempts(stdout: &str) -> Option<u64> {
     for line in stdout.lines() {
         if let Some(idx) = line.find("tries:") {
             let after = &line[idx + 6..];
-            let n: String = after.chars().skip_while(|c| !c.is_ascii_digit())
+            let n: String = after
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
                 .take_while(|c| c.is_ascii_digit())
                 .collect();
             if let Ok(v) = n.parse::<u64>() {
@@ -176,7 +178,11 @@ fn extract_attempts(stdout: &str) -> Option<u64> {
     None
 }
 
-pub fn parse_hydra_output(stdout: &str, default_host: &str, default_service: &str) -> Vec<HydraCred> {
+pub fn parse_hydra_output(
+    stdout: &str,
+    default_host: &str,
+    default_service: &str,
+) -> Vec<HydraCred> {
     let mut out = Vec::new();
     for line in stdout.lines() {
         let line = line.trim();
@@ -197,8 +203,7 @@ pub fn parse_hydra_output(stdout: &str, default_host: &str, default_service: &st
         let service = rest[1..svc_close].to_string();
         let after = &rest[svc_close + 1..];
 
-        let host = extract_field(after, "host:")
-            .unwrap_or_else(|| default_host.to_string());
+        let host = extract_field(after, "host:").unwrap_or_else(|| default_host.to_string());
         let login = match extract_field(after, "login:") {
             Some(v) => v,
             None => continue,

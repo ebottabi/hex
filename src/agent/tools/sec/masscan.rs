@@ -142,14 +142,12 @@ pub fn parse_masscan_json(s: &str) -> Vec<MasscanHit> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let ts = record.get("timestamp").and_then(|v| {
-            v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
         });
         if let Some(ports) = record.get("ports").and_then(|v| v.as_array()) {
             for p in ports {
-                let port = p
-                    .get("port")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u16;
+                let port = p.get("port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
                 let proto = p
                     .get("proto")
                     .and_then(|v| v.as_str())

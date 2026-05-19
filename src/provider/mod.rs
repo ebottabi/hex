@@ -343,7 +343,10 @@ mod tests {
         assert_eq!(ProviderKind::from_str("GROQ"), Some(ProviderKind::Groq));
         assert_eq!(ProviderKind::Groq.label(), "groq");
         assert_eq!(provider_env_var(ProviderKind::Groq), "GROQ_API_KEY");
-        assert_eq!(ProviderKind::Groq.default_model(), "llama-3.3-70b-versatile");
+        assert_eq!(
+            ProviderKind::Groq.default_model(),
+            "llama-3.3-70b-versatile"
+        );
     }
 
     #[test]

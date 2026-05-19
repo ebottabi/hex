@@ -121,7 +121,10 @@ impl Tool for AflFuzzTool {
         let crash_files = list_dir_non_readme(&crashes_dir);
         let hang_count = list_dir_non_readme(&hangs_dir).len();
         let queue_count = list_dir_non_readme(&queue_dir).len();
-        let stats_path = format!("{}/default/fuzzer_stats", args.output_dir.trim_end_matches('/'));
+        let stats_path = format!(
+            "{}/default/fuzzer_stats",
+            args.output_dir.trim_end_matches('/')
+        );
         let fuzzer_stats = std::fs::read_to_string(&stats_path)
             .ok()
             .map(|s| parse_fuzzer_stats(&s));
@@ -196,7 +199,8 @@ mod tests {
 
     #[test]
     fn parses_fuzzer_stats() {
-        let sample = "start_time        : 1700000000\nexecs_done        : 12345\nunique_crashes    : 3\n";
+        let sample =
+            "start_time        : 1700000000\nexecs_done        : 12345\nunique_crashes    : 3\n";
         let v = parse_fuzzer_stats(sample);
         assert_eq!(v["execs_done"], "12345");
         assert_eq!(v["unique_crashes"], "3");

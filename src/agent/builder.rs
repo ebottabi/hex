@@ -80,7 +80,10 @@ fn build_inner<M: CompletionModel + 'static>(
             ask_tx.clone(),
         )),
         Box::new(tools::ListDirTool::new(permission.clone(), ask_tx.clone())),
-        Box::new(tools::WriteTodoList::new(permission.clone(), ask_tx.clone())),
+        Box::new(tools::WriteTodoList::new(
+            permission.clone(),
+            ask_tx.clone(),
+        )),
     ];
 
     if let Some(ctx) = sec_ctx {
@@ -211,10 +214,9 @@ pub fn build_agent(
         let preamble = compose_pentest_preamble(context, &cli.scope, &[]);
         let policy_handle = tools::sec::new_policy_handle();
         if !cli.scope.is_empty() {
-            if let Ok(policy) = crate::pentest::engagement::EngagementPolicy::from_parts(
-                &cli.scope,
-                &[],
-            ) {
+            if let Ok(policy) =
+                crate::pentest::engagement::EngagementPolicy::from_parts(&cli.scope, &[])
+            {
                 *policy_handle.write().unwrap() = Some(policy);
             }
         }

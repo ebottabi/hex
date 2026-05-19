@@ -108,10 +108,9 @@ impl Tool for KerbruteTool {
 
         match mode.as_str() {
             "userenum" => {
-                let uf = args
-                    .users_file
-                    .clone()
-                    .ok_or_else(|| ToolError::Msg("kerbrute userenum: users_file required".into()))?;
+                let uf = args.users_file.clone().ok_or_else(|| {
+                    ToolError::Msg("kerbrute userenum: users_file required".into())
+                })?;
                 argv.push(uf);
             }
             "passwordspray" => {

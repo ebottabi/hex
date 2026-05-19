@@ -180,10 +180,7 @@ pub fn parse_scoutsuite_report(s: &str) -> ParsedScout {
             None => continue,
         };
         for (fid, f) in findings {
-            let flagged = f
-                .get("flagged_items")
-                .and_then(|x| x.as_u64())
-                .unwrap_or(0);
+            let flagged = f.get("flagged_items").and_then(|x| x.as_u64()).unwrap_or(0);
             if flagged == 0 {
                 continue;
             }
@@ -201,10 +198,7 @@ pub fn parse_scoutsuite_report(s: &str) -> ParsedScout {
                     .unwrap_or("warning")
                     .to_string(),
                 flagged_items: flagged,
-                checked_items: f
-                    .get("checked_items")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or(0),
+                checked_items: f.get("checked_items").and_then(|x| x.as_u64()).unwrap_or(0),
             });
         }
     }

@@ -110,7 +110,9 @@ impl Tool for HashcatTool {
                 if let Some(w) = &args.wordlist {
                     argv.push(w.clone());
                 } else {
-                    return Err(ToolError::Msg("hashcat: wordlist required for attack mode 0/1".into()));
+                    return Err(ToolError::Msg(
+                        "hashcat: wordlist required for attack mode 0/1".into(),
+                    ));
                 }
                 if let Some(w2) = args.wordlist.as_ref().filter(|_| attack == 1).cloned() {
                     argv.push(w2);
@@ -120,7 +122,9 @@ impl Tool for HashcatTool {
                 if let Some(m) = &args.mask {
                     argv.push(m.clone());
                 } else {
-                    return Err(ToolError::Msg("hashcat: mask required for attack mode 3".into()));
+                    return Err(ToolError::Msg(
+                        "hashcat: mask required for attack mode 3".into(),
+                    ));
                 }
             }
             6 => {

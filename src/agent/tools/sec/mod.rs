@@ -32,9 +32,9 @@ pub mod tshark;
 pub mod whatweb;
 pub mod zeek_log;
 
+pub use afl_fuzz::AflFuzzTool;
 pub use bloodhound::BloodhoundTool;
 pub use checksec::ChecksecTool;
-pub use afl_fuzz::AflFuzzTool;
 pub use dnsx::DnsxTool;
 pub use ffuf::FfufTool;
 pub use gitleaks::GitleaksTool;
@@ -227,9 +227,7 @@ fn target_in_scope(policy: &EngagementPolicy, target: &str) -> bool {
             }
             continue;
         }
-        if !looks_like_ip(&entry)
-            && (target == entry || target.ends_with(&format!(".{}", entry)))
-        {
+        if !looks_like_ip(&entry) && (target == entry || target.ends_with(&format!(".{}", entry))) {
             return true;
         }
     }

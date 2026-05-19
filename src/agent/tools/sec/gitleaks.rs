@@ -185,16 +185,35 @@ pub fn parse_gitleaks_json(s: &str) -> Vec<GitleaksFinding> {
                 .or_else(|| f.get("endLine"))
                 .and_then(|x| x.as_u64())
                 .unwrap_or(0),
-            commit: f.get("Commit").or_else(|| f.get("commit")).and_then(|x| x.as_str()).map(|s| s.to_string()),
-            author: f.get("Author").or_else(|| f.get("author")).and_then(|x| x.as_str()).map(|s| s.to_string()),
-            email: f.get("Email").or_else(|| f.get("email")).and_then(|x| x.as_str()).map(|s| s.to_string()),
-            date: f.get("Date").or_else(|| f.get("date")).and_then(|x| x.as_str()).map(|s| s.to_string()),
+            commit: f
+                .get("Commit")
+                .or_else(|| f.get("commit"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            author: f
+                .get("Author")
+                .or_else(|| f.get("author"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            email: f
+                .get("Email")
+                .or_else(|| f.get("email"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            date: f
+                .get("Date")
+                .or_else(|| f.get("date"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
             secret_redacted: f
                 .get("Secret")
                 .or_else(|| f.get("secret"))
                 .and_then(|x| x.as_str())
                 .map(|s| s.to_string()),
-            entropy: f.get("Entropy").or_else(|| f.get("entropy")).and_then(|x| x.as_f64()),
+            entropy: f
+                .get("Entropy")
+                .or_else(|| f.get("entropy"))
+                .and_then(|x| x.as_f64()),
         });
     }
     out

@@ -182,22 +182,53 @@ pub fn parse_trivy_json(s: &str) -> TrivyParsed {
         None => return out,
     };
     for r in &results {
-        let target = r.get("Target").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let class = r.get("Class").and_then(|x| x.as_str()).map(|s| s.to_string());
+        let target = r
+            .get("Target")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        let class = r
+            .get("Class")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string());
         if let Some(arr) = r.get("Vulnerabilities").and_then(|x| x.as_array()) {
             for vuln in arr {
-                let id = vuln.get("VulnerabilityID").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                let id = vuln
+                    .get("VulnerabilityID")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if id.is_empty() {
                     continue;
                 }
                 out.vulnerabilities.push(TrivyVuln {
                     vulnerability_id: id,
-                    pkg_name: vuln.get("PkgName").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-                    installed_version: vuln.get("InstalledVersion").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                    fixed_version: vuln.get("FixedVersion").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                    severity: vuln.get("Severity").and_then(|x| x.as_str()).unwrap_or("UNKNOWN").to_string(),
-                    title: vuln.get("Title").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                    primary_url: vuln.get("PrimaryURL").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    pkg_name: vuln
+                        .get("PkgName")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    installed_version: vuln
+                        .get("InstalledVersion")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    fixed_version: vuln
+                        .get("FixedVersion")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    severity: vuln
+                        .get("Severity")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("UNKNOWN")
+                        .to_string(),
+                    title: vuln
+                        .get("Title")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    primary_url: vuln
+                        .get("PrimaryURL")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
                     target: target.clone(),
                     class: class.clone(),
                 });
@@ -205,35 +236,71 @@ pub fn parse_trivy_json(s: &str) -> TrivyParsed {
         }
         if let Some(arr) = r.get("Secrets").and_then(|x| x.as_array()) {
             for sec in arr {
-                let rule_id = sec.get("RuleID").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                let rule_id = sec
+                    .get("RuleID")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if rule_id.is_empty() {
                     continue;
                 }
                 out.secrets.push(TrivySecret {
                     rule_id,
-                    category: sec.get("Category").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                    severity: sec.get("Severity").and_then(|x| x.as_str()).unwrap_or("UNKNOWN").to_string(),
-                    title: sec.get("Title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                    category: sec
+                        .get("Category")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    severity: sec
+                        .get("Severity")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("UNKNOWN")
+                        .to_string(),
+                    title: sec
+                        .get("Title")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     target: target.clone(),
                     start_line: sec.get("StartLine").and_then(|x| x.as_u64()).unwrap_or(0),
                     end_line: sec.get("EndLine").and_then(|x| x.as_u64()).unwrap_or(0),
-                    match_: sec.get("Match").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    match_: sec
+                        .get("Match")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
                 });
             }
         }
         if let Some(arr) = r.get("Misconfigurations").and_then(|x| x.as_array()) {
             for m in arr {
-                let id = m.get("ID").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                let id = m
+                    .get("ID")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if id.is_empty() {
                     continue;
                 }
                 out.misconfigurations.push(TrivyMisconfig {
                     id,
-                    title: m.get("Title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-                    severity: m.get("Severity").and_then(|x| x.as_str()).unwrap_or("UNKNOWN").to_string(),
-                    message: m.get("Message").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    title: m
+                        .get("Title")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    severity: m
+                        .get("Severity")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("UNKNOWN")
+                        .to_string(),
+                    message: m
+                        .get("Message")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
                     target: target.clone(),
-                    resolution: m.get("Resolution").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    resolution: m
+                        .get("Resolution")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
                 });
             }
         }

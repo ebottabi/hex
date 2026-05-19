@@ -148,7 +148,11 @@ fn tail(s: &str, n: usize) -> String {
 fn host_only(s: &str) -> String {
     let no_scheme = s.splitn(2, "://").nth(1).unwrap_or(s);
     let no_path = no_scheme.split('/').next().unwrap_or(no_scheme);
-    no_path.rsplit_once(':').map(|(h, _)| h).unwrap_or(no_path).to_string()
+    no_path
+        .rsplit_once(':')
+        .map(|(h, _)| h)
+        .unwrap_or(no_path)
+        .to_string()
 }
 
 pub fn parse_testssl_json(s: &str) -> Vec<TestsslFinding> {
@@ -180,7 +184,10 @@ pub fn parse_testssl_json(s: &str) -> Vec<TestsslFinding> {
         out.push(TestsslFinding {
             id,
             ip: f.get("ip").and_then(|x| x.as_str()).map(|s| s.to_string()),
-            port: f.get("port").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            port: f
+                .get("port")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
             severity: f
                 .get("severity")
                 .and_then(|x| x.as_str())

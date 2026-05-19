@@ -98,7 +98,11 @@ impl Tool for NxcTool {
             return Err(ToolError::Msg("nxc: targets required".into()));
         }
         check_targets_in_scope(&policy, &args.targets)?;
-        let binary = if which_available("nxc").await { "nxc" } else { "crackmapexec" };
+        let binary = if which_available("nxc").await {
+            "nxc"
+        } else {
+            "crackmapexec"
+        };
         preflight(binary).await?;
 
         let mut argv: Vec<String> = vec![binary.into(), args.protocol.clone()];

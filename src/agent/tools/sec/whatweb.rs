@@ -147,7 +147,10 @@ pub fn parse_whatweb_jsonl(s: &str) -> Vec<WhatwebResult> {
         }
         let http_status = v
             .get("http_status")
-            .and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok())))
+            .and_then(|x| {
+                x.as_u64()
+                    .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+            })
             .map(|n| n as u16);
         let mut plugins = BTreeMap::new();
         if let Some(obj) = v.get("plugins").and_then(|x| x.as_object()) {
@@ -191,7 +194,10 @@ mod tests {
         let row = &r[0];
         assert_eq!(row.target, "https://example.com");
         assert_eq!(row.http_status, Some(200));
-        assert_eq!(row.plugins.get("nginx").unwrap(), &vec!["version:1.18.0".to_string()]);
+        assert_eq!(
+            row.plugins.get("nginx").unwrap(),
+            &vec!["version:1.18.0".to_string()]
+        );
         assert!(row.plugins.contains_key("HTML5"));
     }
 

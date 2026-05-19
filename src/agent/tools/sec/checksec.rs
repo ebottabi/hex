@@ -150,9 +150,8 @@ pub fn parse_checksec_json(s: &str) -> ParsedChecksec {
     } else {
         return ParsedChecksec::default();
     };
-    let g = |k: &str| -> Option<String> {
-        obj.get(k).and_then(|x| x.as_str()).map(|s| s.to_string())
-    };
+    let g =
+        |k: &str| -> Option<String> { obj.get(k).and_then(|x| x.as_str()).map(|s| s.to_string()) };
     ParsedChecksec {
         relro: g("relro"),
         canary: g("canary"),

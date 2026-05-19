@@ -103,8 +103,16 @@ impl Tool for JohnTool {
         }
         show_argv.push(args.hash_file.clone());
 
-        let crack_cmd = crack_argv.iter().map(|s| shq(s)).collect::<Vec<_>>().join(" ");
-        let show_cmd = show_argv.iter().map(|s| shq(s)).collect::<Vec<_>>().join(" ");
+        let crack_cmd = crack_argv
+            .iter()
+            .map(|s| shq(s))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let show_cmd = show_argv
+            .iter()
+            .map(|s| shq(s))
+            .collect::<Vec<_>>()
+            .join(" ");
         let cmd = format!("{} ; {}", crack_cmd, show_cmd);
 
         let outcome = run_shell(&self.ctx, &cmd, args.timeout_secs.unwrap_or(1800)).await?;

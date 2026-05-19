@@ -168,7 +168,9 @@ impl Tool for ProwlerTool {
 
         let summary = format!(
             "prowler {}: {} finding(s) ({} returned)",
-            args.provider, total, findings.len()
+            args.provider,
+            total,
+            findings.len()
         );
         record(&self.ctx, "prowler", &argv, &outcome, &summary);
 
@@ -267,7 +269,12 @@ pub fn parse_prowler_ocsf(s: &str) -> Vec<ProwlerFinding> {
         let compliance = f
             .pointer("/unmapped/compliance")
             .and_then(|x| x.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_str()).map(String::from).collect());
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(String::from)
+                    .collect()
+            });
 
         findings.push(ProwlerFinding {
             check_id,

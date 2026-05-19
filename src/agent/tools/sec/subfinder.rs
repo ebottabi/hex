@@ -64,8 +64,12 @@ impl Tool for SubfinderTool {
         check_targets_in_scope(&policy, std::slice::from_ref(&args.domain))?;
         preflight("subfinder").await?;
 
-        let mut argv: Vec<String> =
-            vec!["subfinder".into(), "-silent".into(), "-d".into(), args.domain.clone()];
+        let mut argv: Vec<String> = vec![
+            "subfinder".into(),
+            "-silent".into(),
+            "-d".into(),
+            args.domain.clone(),
+        ];
         if args.all_sources.unwrap_or(false) {
             argv.push("-all".into());
         }

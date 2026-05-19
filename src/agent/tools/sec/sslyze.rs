@@ -155,7 +155,11 @@ fn tail(s: &str, n: usize) -> String {
 fn host_only(s: &str) -> String {
     let no_scheme = s.splitn(2, "://").nth(1).unwrap_or(s);
     let no_path = no_scheme.split('/').next().unwrap_or(no_scheme);
-    no_path.rsplit_once(':').map(|(h, _)| h).unwrap_or(no_path).to_string()
+    no_path
+        .rsplit_once(':')
+        .map(|(h, _)| h)
+        .unwrap_or(no_path)
+        .to_string()
 }
 
 #[derive(Default)]
@@ -201,11 +205,18 @@ pub fn parse_sslyze_json(s: &str) -> ParsedSslyze {
 
     let scan_result = server.get("scan_result");
 
-    for proto in ["ssl_2_0_cipher_suites", "ssl_3_0_cipher_suites",
-                  "tls_1_0_cipher_suites", "tls_1_1_cipher_suites",
-                  "tls_1_2_cipher_suites", "tls_1_3_cipher_suites"]
-    {
-        let r = match scan_result.and_then(|sr| sr.get(proto)).and_then(|p| p.get("result")) {
+    for proto in [
+        "ssl_2_0_cipher_suites",
+        "ssl_3_0_cipher_suites",
+        "tls_1_0_cipher_suites",
+        "tls_1_1_cipher_suites",
+        "tls_1_2_cipher_suites",
+        "tls_1_3_cipher_suites",
+    ] {
+        let r = match scan_result
+            .and_then(|sr| sr.get(proto))
+            .and_then(|p| p.get("result"))
+        {
             Some(r) => r,
             None => continue,
         };
@@ -228,13 +239,28 @@ pub fn parse_sslyze_json(s: &str) -> ParsedSslyze {
         .and_then(|x| x.as_array())
     {
         for dep in deployment {
-            if let Some(chain) = dep.get("received_certificate_chain").and_then(|x| x.as_array()) {
+            if let Some(chain) = dep
+                .get("received_certificate_chain")
+                .and_then(|x| x.as_array())
+            {
                 for cert in chain {
                     out.certificates.push(SslyzeCert {
-                        subject: cert.get("subject").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                        issuer: cert.get("issuer").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                        not_valid_before: cert.get("not_valid_before").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                        not_valid_after: cert.get("not_valid_after").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                        subject: cert
+                            .get("subject")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string()),
+                        issuer: cert
+                            .get("issuer")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string()),
+                        not_valid_before: cert
+                            .get("not_valid_before")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string()),
+                        not_valid_after: cert
+                            .get("not_valid_after")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string()),
                         public_key_algorithm: cert
                             .get("public_key")
                             .and_then(|pk| pk.get("algorithm"))
@@ -314,14 +340,26 @@ mod tests {
         let r = parse_sslyze_json(sample);
         assert_eq!(r.hostname, "example.com");
         assert_eq!(r.port, Some(443));
-        let tls12 = r.protocols.iter().find(|p| p.protocol == "tls_1_2").unwrap();
+        let tls12 = r
+            .protocols
+            .iter()
+            .find(|p| p.protocol == "tls_1_2")
+            .unwrap();
         assert!(tls12.supported);
         assert_eq!(tls12.cipher_count, 3);
-        let ssl3 = r.protocols.iter().find(|p| p.protocol == "ssl_3_0").unwrap();
+        let ssl3 = r
+            .protocols
+            .iter()
+            .find(|p| p.protocol == "ssl_3_0")
+            .unwrap();
         assert!(!ssl3.supported);
         assert_eq!(r.certificates.len(), 1);
         assert_eq!(r.certificates[0].subject.as_deref(), Some("CN=example.com"));
-        let hb = r.vulnerabilities.iter().find(|v| v.name == "HEARTBLEED").unwrap();
+        let hb = r
+            .vulnerabilities
+            .iter()
+            .find(|v| v.name == "HEARTBLEED")
+            .unwrap();
         assert!(!hb.is_vulnerable);
     }
 }

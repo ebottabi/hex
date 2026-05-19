@@ -159,7 +159,11 @@ fn parse_entry(v: &serde_json::Value) -> Option<ExploitEntry> {
         .get("EDB-ID")
         .and_then(|x| x.as_str())
         .map(|s| s.to_string())
-        .or_else(|| v.get("EDB-ID").and_then(|x| x.as_u64()).map(|n| n.to_string()))?;
+        .or_else(|| {
+            v.get("EDB-ID")
+                .and_then(|x| x.as_u64())
+                .map(|n| n.to_string())
+        })?;
     let title = v
         .get("Title")
         .and_then(|x| x.as_str())
@@ -174,9 +178,18 @@ fn parse_entry(v: &serde_json::Value) -> Option<ExploitEntry> {
         edb_id,
         title,
         path,
-        date: v.get("Date").and_then(|x| x.as_str()).map(|s| s.to_string()),
-        author: v.get("Author").and_then(|x| x.as_str()).map(|s| s.to_string()),
-        type_: v.get("Type").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        date: v
+            .get("Date")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        author: v
+            .get("Author")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        type_: v
+            .get("Type")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
         platform: v
             .get("Platform")
             .and_then(|x| x.as_str())

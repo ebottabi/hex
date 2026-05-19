@@ -190,7 +190,10 @@ pub fn parse_ffuf_json(s: &str) -> Vec<FfufHit> {
             url,
             input: r
                 .get("input")
-                .and_then(|i| i.get("FUZZ").or_else(|| i.as_object().and_then(|m| m.values().next())))
+                .and_then(|i| {
+                    i.get("FUZZ")
+                        .or_else(|| i.as_object().and_then(|m| m.values().next()))
+                })
                 .and_then(|x| x.as_str())
                 .map(|s| s.to_string()),
             status: r.get("status").and_then(|x| x.as_u64()).unwrap_or(0) as u16,

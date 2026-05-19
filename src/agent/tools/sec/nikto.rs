@@ -161,7 +161,10 @@ pub fn parse_nikto_json(s: &str) -> ParsedNiktoPub {
         Err(_) => return ParsedNiktoPub::default(),
     };
     let report = if v.is_array() {
-        v.as_array().and_then(|a| a.first()).cloned().unwrap_or(serde_json::Value::Null)
+        v.as_array()
+            .and_then(|a| a.first())
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
     } else {
         v
     };
@@ -179,7 +182,10 @@ pub fn parse_nikto_json(s: &str) -> ParsedNiktoPub {
         .map(|s| s.to_string());
     let port = report
         .get("port")
-        .and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok())))
+        .and_then(|x| {
+            x.as_u64()
+                .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+        })
         .map(|n| n as u16);
     let banner = report
         .get("banner")
@@ -224,8 +230,15 @@ pub fn parse_nikto_json(s: &str) -> ParsedNiktoPub {
                     .or_else(|| f.get("osvdb"))
                     .and_then(|x| x.as_str())
                     .map(|s| s.to_string()),
-                method: f.get("method").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                uri: f.get("uri").or_else(|| f.get("url")).and_then(|x| x.as_str()).map(|s| s.to_string()),
+                method: f
+                    .get("method")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                uri: f
+                    .get("uri")
+                    .or_else(|| f.get("url"))
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
                 message,
                 references,
             });

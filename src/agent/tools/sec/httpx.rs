@@ -138,15 +138,8 @@ fn tail(s: &str, n: usize) -> String {
 
 fn host_of(url: &str) -> String {
     let s = url.trim();
-    let no_scheme = s
-        .splitn(2, "://")
-        .nth(1)
-        .unwrap_or(s);
-    no_scheme
-        .split('/')
-        .next()
-        .unwrap_or(no_scheme)
-        .to_string()
+    let no_scheme = s.splitn(2, "://").nth(1).unwrap_or(s);
+    no_scheme.split('/').next().unwrap_or(no_scheme).to_string()
 }
 
 pub fn parse_httpx_jsonl(s: &str) -> Vec<HttpxProbe> {

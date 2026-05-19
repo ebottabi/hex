@@ -117,7 +117,9 @@ impl Tool for RopperTool {
 
         let summary = format!(
             "ropper {}: {} gadget(s) (returned {})",
-            args.file, total, parsed.gadgets.len()
+            args.file,
+            total,
+            parsed.gadgets.len()
         );
         record(&self.ctx, "ropper", &argv, &outcome, &summary);
 

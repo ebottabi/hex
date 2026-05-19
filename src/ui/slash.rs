@@ -204,12 +204,17 @@ pub async fn handle_slash(
                     .unwrap_or_else(|| kind.default_model().to_string());
                 if model_name.is_empty() {
                     renderer.write_line(
-                        &format!("provider {} requires an explicit model: /provider {} <model>", kind.label(), kind.label()),
+                        &format!(
+                            "provider {} requires an explicit model: /provider {} <model>",
+                            kind.label(),
+                            kind.label()
+                        ),
                         C_ERROR,
                     )?;
                     return Ok(());
                 }
-                let new_client = match crate::provider::create_client(kind, cli.api_key.as_deref()) {
+                let new_client = match crate::provider::create_client(kind, cli.api_key.as_deref())
+                {
                     Ok(c) => c,
                     Err(e) => {
                         renderer.write_line(&format!("provider switch failed: {}", e), C_ERROR)?;
@@ -232,7 +237,11 @@ pub async fn handle_slash(
                 session.model = CompactString::new(&model_name);
                 session.provider = CompactString::new(kind.label());
                 renderer.write_line(
-                    &format!("switched to provider: {} (model: {})", kind.label(), model_name),
+                    &format!(
+                        "switched to provider: {} (model: {})",
+                        kind.label(),
+                        model_name
+                    ),
                     C_AGENT,
                 )?;
             }

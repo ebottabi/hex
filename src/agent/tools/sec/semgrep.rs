@@ -147,11 +147,19 @@ pub fn parse_semgrep_json(s: &str) -> (Vec<SemgrepFinding>, Vec<String>) {
     let mut findings = Vec::new();
     if let Some(arr) = v.get("results").and_then(|x| x.as_array()) {
         for r in arr {
-            let check_id = r.get("check_id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let check_id = r
+                .get("check_id")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             if check_id.is_empty() {
                 continue;
             }
-            let path = r.get("path").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let path = r
+                .get("path")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             let start_line = r
                 .get("start")
                 .and_then(|x| x.get("line"))

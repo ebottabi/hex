@@ -69,10 +69,9 @@ impl Tool for NmapTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description:
-                "Run nmap against in-scope targets. Returns parsed hosts/ports/services. \
+            description: "Run nmap against in-scope targets. Returns parsed hosts/ports/services. \
                  Requires an active pentest engagement policy and all targets must be in scope."
-                    .to_string(),
+                .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

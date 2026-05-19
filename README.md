@@ -35,6 +35,8 @@
 - [Anatomy of the agent loop](#anatomy-of-the-agent-loop)
 - [How LLMs are called](#how-llms-are-called)
 - [How tools are dispatched](#how-tools-are-dispatched)
+- [Agentic coding flow](#agentic-coding-flow)
+- [Coding tools registry](#coding-tools-registry)
 - [Security tools registry (31 typed wrappers)](#security-tools-registry-31-typed-wrappers)
 - [Pentest pipeline](#pentest-pipeline)
 - [Validator & Scorecard](#validator--scorecard)
@@ -52,9 +54,11 @@
 
 ## Features
 
+- **Dual identity** — a senior software engineer **and** an authorized offensive-security operator in one binary. Same loop, two prompt presets, different tool registries.
+- **Agentic coding** — read/write/edit/grep/list/glob/bash + todo list + multi-turn planning. Reads `AGENTS.md` / `CLAUDE.md` / `.cursorrules` automatically. Custom prompt presets via `prompts/*.md`.
 - **6 LLM providers**, one runtime: OpenRouter · OpenAI · Anthropic · Gemini · Groq · Ollama · any OpenAI-compatible endpoint.
 - **Streaming agent loop** built on `rig` — token, reasoning, tool-call, and tool-result events flow through a `tokio::mpsc` channel.
-- **31 typed security-tool wrappers** (nmap, nuclei, ffuf, hydra, hashcat, impacket, bloodhound, prowler, …) that return structured JSON instead of raw text.
+- **31 typed security-tool wrappers** (nmap, nuclei, ffuf, hydra, hashcat, impacket, bloodhound, prowler, …) that return structured JSON instead of raw text. Only registered when `--authorized-pentest` is set.
 - **Authorized pentest pipeline** with hard scope guards, evidence log, Validator A–D, Scorecard (Wilson lower-bound), and cost budget.
 - **Slash commands** for in-session control: `/provider`, `/model`, `/mode`, `/compress`, `/pentest`, `/sessions`, etc.
 - **Persistent sessions** under `~/.local/share/hex/sessions/` with token-aware auto-compaction.
@@ -231,6 +235,108 @@ Tools are registered into `rig::AgentBuilder` at build time. When the LLM emits 
 ```
 
 Each tool is a Rust struct implementing `rig::tool::Tool` with `INPUT` and `OUTPUT` types — all serde-typed, so the LLM never sees raw stdout unless the wrapper chooses to surface it.
+
+---
+
+## Agentic coding flow
+
+Default mode (no `--authorized-pentest`). hex behaves as a peer software engineer: it explores the repo, plans, edits, runs builds/tests, and iterates from the results — fully autonomous between user turns.
+
+```
+                ┌──────────────────────────────────────────────────────┐
+                │  USER turn: "add JWT refresh-token rotation"         │
+                └────────────────────────┬─────────────────────────────┘
+                                         │
+                                         ▼
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │                       CONTEXT ASSEMBLY (preamble)                        │
+   │  • SYSTEM_PROMPT  (dual coding+security identity)                        │
+   │  • AGENTS.md / CLAUDE.md / .cursorrules    (project conventions)         │
+   │  • prompts/<preset>.md                     (active /mode preset)         │
+   │  • cwd · git branch · OS · session id                                    │
+   └────────────────────────────────────┬─────────────────────────────────────┘
+                                        │
+                                        ▼
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │                      PLAN  →  ACT  →  OBSERVE  loop                      │
+   │                                                                          │
+   │   ╔═══════════╗     ╔═══════════╗     ╔═══════════╗     ╔═══════════╗   │
+   │   ║   PLAN    ║ ──► ║  EXPLORE  ║ ──► ║   EDIT    ║ ──► ║  VERIFY   ║   │
+   │   ║ write_to- ║     ║ list_dir  ║     ║ create    ║     ║ bash:     ║   │
+   │   ║ do_list   ║     ║ glob/grep ║     ║ edit      ║     ║  cargo    ║   │
+   │   ║           ║     ║ read_file ║     ║ write     ║     ║  test/    ║   │
+   │   ║           ║     ║           ║     ║           ║     ║  build    ║   │
+   │   ╚═════╤═════╝     ╚═════╤═════╝     ╚═════╤═════╝     ╚═════╤═════╝   │
+   │         │                 │                 │                 │         │
+   │         └─────────────────┴───────┬─────────┴─────────────────┘         │
+   │                                   ▼                                     │
+   │                       ┌────────────────────────┐                        │
+   │                       │  tool_result → context │ ◄── error?  loop back  │
+   │                       │  (assistant sees it)   │     fix → re-verify    │
+   │                       └────────────┬───────────┘                        │
+   │                                    │                                    │
+   │              (no more tool calls = turn complete; reply to user)        │
+   └────────────────────────────────────┬─────────────────────────────────────┘
+                                        │
+                                        ▼
+                    ┌───────────────────────────────────────┐
+                    │  Assistant summary + diff/log to TTY  │
+                    │  Session saved → ~/.local/share/hex/  │
+                    └───────────────────────────────────────┘
+```
+
+**Hallmarks of the coding flow:**
+- **Plan first.** Multi-step tasks open a `write_todo_list` so progress is visible in the TTY and survives compaction.
+- **Read before write.** `view` / `grep` / `glob` are called before any `edit` to avoid hallucinated paths.
+- **Surgical edits.** `edit` requires an exact-match `old_str` — the model is forced to ground its change in a verified file region.
+- **Verify the change.** After edits, hex runs the project's own build/test/lint via the `bash` tool, reads stderr, and iterates on failures inside the same turn.
+- **Permission-gated writes.** `edit`/`create`/`bash` go through the permission engine (`AllowAll` / `WorkspaceWrite` / `Ask`) — keys never leak via the bash tool because the permission engine sees the candidate command before exec.
+- **Resumable.** Sessions auto-save after every turn; `/sessions` lists them, `--resume <id>` reattaches.
+
+### Example: end-to-end coding turn
+
+```
+user> add a CLI flag --json that prints results as JSON
+
+[plan]       write_todo_list  3 items
+[explore]    grep "Args" src/      → src/cli.rs
+[read]       view src/cli.rs       (lines 1-80)
+[read]       view src/main.rs      (lines 1-40)
+[edit]       edit src/cli.rs       +5 -0   (add json: bool field)
+[edit]       edit src/main.rs      +12 -2  (branch on cli.json)
+[verify]     bash  cargo test --quiet
+             → ok. 142 passed; 0 failed.
+[verify]     bash  cargo clippy -- -D warnings
+             → ok.
+assistant>   Added `--json`. Output goes through serde_json::to_string_pretty
+             when the flag is set; existing TTY rendering is unchanged. Tests
+             pass; no clippy regressions.
+```
+
+Source: `src/agent/{builder,runner}.rs`, `src/agent/tools/*.rs`, `src/agent/prompt.rs::SYSTEM_PROMPT`
+
+---
+
+## Coding tools registry
+
+Always registered, in every mode. These are the agent's hands for software work.
+
+| Tool              | Purpose                                | Permission gate |
+|-------------------|----------------------------------------|-----------------|
+| `view`            | Read a file (with optional line range) | none            |
+| `glob`            | Match file paths by pattern            | none            |
+| `grep`            | Ripgrep across the workspace           | none            |
+| `list_dir`        | Tree listing of a directory            | none            |
+| `create`          | Create a new file (fails if exists)    | write           |
+| `edit`            | Surgical string replacement in a file  | write           |
+| `write`           | Overwrite a file                       | write           |
+| `bash`            | Run a shell command                    | exec            |
+| `write_todo_list` | Persist plan / progress                | none            |
+| `fetch`           | HTTP GET for doc / API lookup          | network         |
+
+Source: `src/agent/tools/{view,glob,grep,list_dir,create,edit,write,bash,todo,fetch}.rs`
+
+The **edit** tool is the workhorse — it requires a unique `old_str` match, so the model cannot "drift" a file without first reading enough context to write a precise pattern. This is the single biggest reason agentic edits stay correct over long sessions.
 
 ---
 

@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -63,9 +63,11 @@ impl Tool for NiktoTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<NiktoOutput>("Run nikto web server scanner against a single in-scope host. Returns \
+            description: append_output_schema::<NiktoOutput>(
+                "Run nikto web server scanner against a single in-scope host. Returns \
                           typed findings with OSVDB IDs, URIs, and references. Target host must \
-                          be in scope."),
+                          be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

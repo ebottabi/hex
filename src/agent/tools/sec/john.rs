@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -58,8 +58,10 @@ impl Tool for JohnTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<JohnOutput>("John the Ripper offline cracker. Runs the cracker, then `john --show` \
-                          to enumerate recovered credentials. Returns user:plaintext pairs."),
+            description: append_output_schema::<JohnOutput>(
+                "John the Ripper offline cracker. Runs the cracker, then `john --show` \
+                          to enumerate recovered credentials. Returns user:plaintext pairs.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

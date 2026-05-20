@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -93,9 +93,11 @@ impl Tool for TrivyTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<TrivyOutput>("Run trivy (vulns, secrets, misconfig) against a filesystem path, image, \
+            description: append_output_schema::<TrivyOutput>(
+                "Run trivy (vulns, secrets, misconfig) against a filesystem path, image, \
                           or repo. Returns typed vulnerabilities, secrets, and misconfigurations. \
-                          Requires an active pentest engagement."),
+                          Requires an active pentest engagement.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

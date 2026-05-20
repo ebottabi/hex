@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -61,8 +61,10 @@ impl Tool for HttpxTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<HttpxOutput>("HTTP probe via httpx (ProjectDiscovery). Returns status, title, server, \
-                          detected tech, and final URL per target. All targets must be in scope."),
+            description: append_output_schema::<HttpxOutput>(
+                "HTTP probe via httpx (ProjectDiscovery). Returns status, title, server, \
+                          detected tech, and final URL per target. All targets must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

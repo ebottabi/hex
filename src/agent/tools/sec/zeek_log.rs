@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -52,10 +52,12 @@ impl Tool for ZeekLogTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<ZeekLogOutput>("Parse a Zeek TSV log file (conn.log, dns.log, http.log, ssl.log, \
+            description: append_output_schema::<ZeekLogOutput>(
+                "Parse a Zeek TSV log file (conn.log, dns.log, http.log, ssl.log, \
                           notice.log, etc.). Returns the field list from the header and each \
                           record as a field->value map. Use `filter_field`+`filter_value` to \
-                          narrow (substring match). Caps at 1000 records by default."),
+                          narrow (substring match). Caps at 1000 records by default.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

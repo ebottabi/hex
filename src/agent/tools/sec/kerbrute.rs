@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -64,9 +64,11 @@ impl Tool for KerbruteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<KerbruteOutput>("Kerbrute — Kerberos username enumeration and password spraying against \
+            description: append_output_schema::<KerbruteOutput>(
+                "Kerbrute — Kerberos username enumeration and password spraying against \
                           an AD domain controller. Modes: userenum, passwordspray, bruteuser. \
-                          DC must be in scope."),
+                          DC must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

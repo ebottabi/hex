@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -84,10 +84,12 @@ impl Tool for ImpacketTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<ImpacketOutput>("Impacket suite dispatcher. Supported actions: secretsdump (dump NTDS / \
+            description: append_output_schema::<ImpacketOutput>(
+                "Impacket suite dispatcher. Supported actions: secretsdump (dump NTDS / \
                           LSA / SAM hashes), getuserspns (Kerberoasting), getnpusers (ASREP \
                           roasting). Returns typed credentials / SPN tickets / ASREP hashes. \
-                          Target host must be in scope."),
+                          Target host must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

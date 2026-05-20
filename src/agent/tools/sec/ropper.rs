@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -61,9 +61,11 @@ impl Tool for RopperTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<RopperOutput>("Ropper ROP gadget finder. Returns address+instructions for gadgets \
+            description: append_output_schema::<RopperOutput>(
+                "Ropper ROP gadget finder. Returns address+instructions for gadgets \
                           discovered in an ELF/Mach-O/PE binary. Use `search` to filter (e.g. \
-                          'pop rdi; ret'). Local only."),
+                          'pop rdi; ret'). Local only.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

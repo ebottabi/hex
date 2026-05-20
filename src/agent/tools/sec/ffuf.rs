@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -66,9 +66,11 @@ impl Tool for FfufTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<FfufOutput>("Fast web fuzzer (ffuf). Use FUZZ keyword in the URL to mark the \
+            description: append_output_schema::<FfufOutput>(
+                "Fast web fuzzer (ffuf). Use FUZZ keyword in the URL to mark the \
                           injection point (e.g. https://target/FUZZ). Target host must be in \
-                          scope. Returns typed hits with status, length, and content type."),
+                          scope. Returns typed hits with status, length, and content type.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

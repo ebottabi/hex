@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -46,8 +46,10 @@ impl Tool for SubfinderTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<SubfinderOutput>("Passive subdomain enumeration via subfinder. Requires the root domain \
-                          to be inside the engagement scope."),
+            description: append_output_schema::<SubfinderOutput>(
+                "Passive subdomain enumeration via subfinder. Requires the root domain \
+                          to be inside the engagement scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

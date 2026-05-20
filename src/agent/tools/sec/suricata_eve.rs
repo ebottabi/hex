@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -68,10 +68,12 @@ impl Tool for SuricataEveTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<SuricataEveOutput>("Parse a Suricata eve.json log (JSONL). Returns alert list with \
+            description: append_output_schema::<SuricataEveOutput>(
+                "Parse a Suricata eve.json log (JSONL). Returns alert list with \
                           signature/category/severity, an event-type histogram, and a sample \
                           of non-alert events (HTTP/DNS/TLS/...). Filter via `event_types`, \
-                          `min_severity` (1=high..3=low), or `since` (ISO8601 prefix match)."),
+                          `min_severity` (1=high..3=low), or `since` (ISO8601 prefix match).",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

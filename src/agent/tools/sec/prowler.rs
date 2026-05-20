@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -73,11 +73,13 @@ impl Tool for ProwlerTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<ProwlerOutput>("Prowler cloud security posture scanner (AWS / Azure / GCP / \
+            description: append_output_schema::<ProwlerOutput>(
+                "Prowler cloud security posture scanner (AWS / Azure / GCP / \
                           Kubernetes). Requires the provider's credentials to be configured in \
                           the environment. Returns typed findings with check_id, status, \
                           severity, resource, and compliance mappings. Use `services` / `checks` \
-                          / `severity` / `compliance` to narrow scope."),
+                          / `severity` / `compliance` to narrow scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

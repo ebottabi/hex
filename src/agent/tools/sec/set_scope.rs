@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -42,12 +42,14 @@ impl Tool for SetScopeTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<SetScopeOutput>("Set or update the authorized engagement scope for this session. Call \
+            description: append_output_schema::<SetScopeOutput>(
+                "Set or update the authorized engagement scope for this session. Call \
                           this when the user grants targets in natural language (e.g. 'the target \
                           is api.example.com' or 'scope: 10.0.0.0/24'). Once set, every subsequent \
                           security tool call (nmap, httpx, nuclei, searchsploit, ...) will use \
                           this scope. Pass an array of hostnames, IPs, or CIDRs. Idempotent — \
-                          calling again replaces the scope."),
+                          calling again replaces the scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

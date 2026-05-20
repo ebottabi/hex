@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -69,10 +69,12 @@ impl Tool for NxcTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<NxcOutput>("NetExec (nxc / crackmapexec) — authenticate, enumerate, and run modules \
+            description: append_output_schema::<NxcOutput>(
+                "NetExec (nxc / crackmapexec) — authenticate, enumerate, and run modules \
                           across SMB/WinRM/LDAP/MSSQL/SSH/RDP/FTP. Returns typed per-host results \
                           with success/info/fail status and Pwn3d! detection. Targets must be in \
-                          scope."),
+                          scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

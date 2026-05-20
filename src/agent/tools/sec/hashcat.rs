@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -62,10 +62,12 @@ impl Tool for HashcatTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<HashcatOutput>("Offline password cracker (hashcat). Specify hash mode (-m), attack mode \
+            description: append_output_schema::<HashcatOutput>(
+                "Offline password cracker (hashcat). Specify hash mode (-m), attack mode \
                           (0=straight, 1=combination, 3=brute-force, 6=hybrid-wordlist-mask, \
                           7=hybrid-mask-wordlist), and wordlist or mask. Returns hash:plaintext \
-                          pairs. Requires an active pentest engagement."),
+                          pairs. Requires an active pentest engagement.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

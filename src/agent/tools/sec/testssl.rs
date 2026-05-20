@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -60,9 +60,11 @@ impl Tool for TestsslTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<TestsslOutput>("TLS/SSL posture scan via testssl.sh. Returns typed findings with \
+            description: append_output_schema::<TestsslOutput>(
+                "TLS/SSL posture scan via testssl.sh. Returns typed findings with \
                           severity (OK/INFO/LOW/MEDIUM/HIGH/CRITICAL), CVE/CWE references, and \
-                          per-check IDs. Target host must be in scope."),
+                          per-check IDs. Target host must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

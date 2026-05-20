@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -63,9 +63,11 @@ impl Tool for SearchsploitTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<SearchsploitOutput>("Local offline ExploitDB search via searchsploit -j (JSON). Returns \
+            description: append_output_schema::<SearchsploitOutput>(
+                "Local offline ExploitDB search via searchsploit -j (JSON). Returns \
                           typed entries with EDB ID, title, path, date, author, platform, type. \
-                          Local only; no scope check (queries the local exploit database)."),
+                          Local only; no scope check (queries the local exploit database).",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

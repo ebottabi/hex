@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -70,10 +70,12 @@ impl Tool for HydraTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<HydraOutput>("Online password attack via hydra. Supports ssh, ftp, http-get, \
+            description: append_output_schema::<HydraOutput>(
+                "Online password attack via hydra. Supports ssh, ftp, http-get, \
                           http-post-form, smb, rdp, mysql, postgres, etc. Returns typed found \
                           credentials. Target host must be in scope and the engagement RoE must \
-                          permit online password attempts."),
+                          permit online password attempts.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

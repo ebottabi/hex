@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -64,9 +64,11 @@ impl Tool for GitleaksTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<GitleaksOutput>("Scan a directory or git repo for committed secrets via gitleaks. \
+            description: append_output_schema::<GitleaksOutput>(
+                "Scan a directory or git repo for committed secrets via gitleaks. \
                           Returns typed findings (rule id, file, line range, optional commit \
-                          metadata, redacted secret). Requires an active pentest engagement."),
+                          metadata, redacted secret). Requires an active pentest engagement.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

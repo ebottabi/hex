@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -54,8 +54,10 @@ impl Tool for MasscanTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<MasscanOutput>("High-rate TCP port sweep with masscan. Returns parsed hits as JSON. Requires \
-                 root and an active engagement policy; all targets must be in scope."),
+            description: append_output_schema::<MasscanOutput>(
+                "High-rate TCP port sweep with masscan. Returns parsed hits as JSON. Requires \
+                 root and an active engagement policy; all targets must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

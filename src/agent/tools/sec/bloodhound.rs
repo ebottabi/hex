@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -61,9 +61,11 @@ impl Tool for BloodhoundTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<BloodhoundOutput>("Run bloodhound-python (BloodHound.py) AD collector against an in-scope \
+            description: append_output_schema::<BloodhoundOutput>(
+                "Run bloodhound-python (BloodHound.py) AD collector against an in-scope \
                           domain controller. Writes JSON files (users, computers, groups, \
-                          domains, gpos, ous) and returns per-category object counts."),
+                          domains, gpos, ous) and returns per-category object counts.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

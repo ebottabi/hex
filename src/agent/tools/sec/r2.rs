@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -48,10 +48,12 @@ impl Tool for R2Tool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<R2Output>("radare2 batch executor. Runs r2 -q with the given commands against \
+            description: append_output_schema::<R2Output>(
+                "radare2 batch executor. Runs r2 -q with the given commands against \
                           a binary. Use `aaa` for analysis, `iIj`/`aflj`/`izzj` for JSON output \
                           (those will be parsed into the `json` field if the final stdout is \
-                          JSON). Local only. Use `write=true` for `-w` (write mode). "),
+                          JSON). Local only. Use `write=true` for `-w` (write mode). ",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

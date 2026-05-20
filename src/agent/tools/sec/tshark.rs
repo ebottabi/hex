@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -52,11 +52,13 @@ impl Tool for TsharkTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<TsharkOutput>("tshark pcap reader. Parses a capture file with optional display \
+            description: append_output_schema::<TsharkOutput>(
+                "tshark pcap reader. Parses a capture file with optional display \
                           filter (-Y) and field selection (-e). Default format is `ek` \
                           (Elasticsearch JSONL, one JSON object per packet). Use `format: \
                           'fields'` with `fields: ['ip.src','tcp.dstport',...]` for tabular \
-                          extraction. Caps at 5000 packets by default."),
+                          extraction. Caps at 5000 packets by default.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

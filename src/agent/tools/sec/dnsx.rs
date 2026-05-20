@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -62,8 +62,10 @@ impl Tool for DnsxTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<DnsxOutput>("Batch DNS resolution via dnsx. Returns A/AAAA/CNAME/MX/NS/TXT per host. \
-                          All hosts must be in scope."),
+            description: append_output_schema::<DnsxOutput>(
+                "Batch DNS resolution via dnsx. Returns A/AAAA/CNAME/MX/NS/TXT per host. \
+                          All hosts must be in scope.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

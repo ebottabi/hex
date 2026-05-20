@@ -1,7 +1,7 @@
+use crate::agent::tools::schema::append_output_schema;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use schemars::JsonSchema;
-use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -61,10 +61,12 @@ impl Tool for ScoutsuiteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: append_output_schema::<ScoutsuiteOutput>("Scout Suite multi-cloud security auditor (AWS / Azure / GCP / \
+            description: append_output_schema::<ScoutsuiteOutput>(
+                "Scout Suite multi-cloud security auditor (AWS / Azure / GCP / \
                           AliCloud / OCI). Provider credentials must be configured. Returns \
                           typed findings per service with severity (danger/warning) and counts \
-                          of flagged vs checked items."),
+                          of flagged vs checked items.",
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

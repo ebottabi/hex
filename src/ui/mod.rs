@@ -98,6 +98,121 @@ fn format_tool_call_summary(name: &str, args: &serde_json::Value) -> String {
     }
 }
 
+enum ToolResultSummary {
+    Ok(String),
+    Err(String),
+}
+
+/// Always produce a one-line indicator of what a tool returned so the user can
+/// see whether each step actually accomplished anything (instead of staring at
+/// a wall of `◈ httpx` lines while the model thrashes on empty results).
+fn summarize_tool_result(output: &str, show_full: bool) -> ToolResultSummary {
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return ToolResultSummary::Ok("empty result".to_string());
+    }
+
+    // Most failures bubble up as serialized ToolError JSON like
+    // {"error":"tool 'searchsploit' not found in PATH..."} or as plain text
+    // starting with "error" / "Error". Detect either shape and surface it.
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(err) = val
+            .get("error")
+            .and_then(|v| v.as_str())
+            .or_else(|| val.get("Err").and_then(|v| v.as_str()))
+            .or_else(|| val.get("err").and_then(|v| v.as_str()))
+        {
+            return ToolResultSummary::Err(first_line(err, 200).into_owned());
+        }
+
+        let mut bits: Vec<String> = Vec::new();
+        if let Some(code) = val.get("exit_code").and_then(|v| v.as_i64()) {
+            if code != 0 {
+                let tail = val
+                    .get("stderr_tail")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| val.get("stderr").and_then(|v| v.as_str()))
+                    .map(|s| first_line(s, 200).into_owned())
+                    .unwrap_or_default();
+                let msg = if tail.is_empty() {
+                    format!("exit {}", code)
+                } else {
+                    format!("exit {} — {}", code, tail)
+                };
+                return ToolResultSummary::Err(msg);
+            }
+            bits.push(format!("exit {}", code));
+        }
+        if let Some(n) = val.get("findings").and_then(|v| v.as_array()) {
+            bits.push(format!("{} finding(s)", n.len()));
+        }
+        if let Some(n) = val.get("hosts").and_then(|v| v.as_array()) {
+            bits.push(format!("{} host(s)", n.len()));
+        }
+        if let Some(n) = val.get("subdomains").and_then(|v| v.as_array()) {
+            bits.push(format!("{} subdomain(s)", n.len()));
+        }
+        if let Some(n) = val.get("urls").and_then(|v| v.as_array()) {
+            bits.push(format!("{} url(s)", n.len()));
+        }
+        if let Some(n) = val.get("exploits").and_then(|v| v.as_array()) {
+            bits.push(format!("{} exploit(s)", n.len()));
+        }
+        if let Some(n) = val.get("entries").and_then(|v| v.as_array()) {
+            bits.push(format!("{} entry(ies)", n.len()));
+        }
+        if let Some(scope) = val.get("active_scope").and_then(|v| v.as_array()) {
+            let names: Vec<String> = scope
+                .iter()
+                .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                .collect();
+            if !names.is_empty() {
+                bits.push(format!("scope: {}", names.join(",")));
+            }
+        }
+        if !bits.is_empty() {
+            return ToolResultSummary::Ok(bits.join(" · "));
+        }
+        // structured but unrecognised — fall through to byte-size summary.
+        let len = trimmed.chars().count();
+        return ToolResultSummary::Ok(format!("{} chars", len));
+    }
+
+    // Plain-text result.
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("error") || lower.starts_with("err:") {
+        return ToolResultSummary::Err(first_line(trimmed, 200).into_owned());
+    }
+    if show_full {
+        let head: String = trimmed.chars().take(200).collect();
+        let len = trimmed.chars().count();
+        if len > 200 {
+            ToolResultSummary::Ok(format!("{}... ({} chars)", head, len))
+        } else {
+            ToolResultSummary::Ok(head)
+        }
+    } else {
+        let head: String = first_line(trimmed, 120).into_owned();
+        let len = trimmed.chars().count();
+        if len > head.chars().count() {
+            ToolResultSummary::Ok(format!("{} ({} chars)", head, len))
+        } else {
+            ToolResultSummary::Ok(head)
+        }
+    }
+}
+
+fn first_line(s: &str, max_chars: usize) -> std::borrow::Cow<'_, str> {
+    let line = s.lines().next().unwrap_or("").trim();
+    let count = line.chars().count();
+    if count <= max_chars {
+        std::borrow::Cow::Borrowed(line)
+    } else {
+        let truncated: String = line.chars().take(max_chars).collect();
+        std::borrow::Cow::Owned(format!("{}…", truncated))
+    }
+}
+
 fn refresh_display(
     renderer: &mut Renderer,
     input: &InputEditor,
@@ -413,6 +528,7 @@ pub async fn run_interactive(
                                     let safe_line = sanitize_output(line);
                                     renderer.write_line(&format!("> {}", safe_line), Color::Green)?;
                                 }
+                                let _ = renderer.scroll_to_bottom();
                                 renderer.write_line("", Color::White)?;
 
                                 let history = crate::agent::runner::convert_history(session);
@@ -445,6 +561,13 @@ pub async fn run_interactive(
                     std::future::pending().await
                 }
             } => {
+                // Always snap the viewport to the bottom before applying an
+                // agent event. Without this, if the user scrolls up while a
+                // stream is in flight, `write_line` / `replace_from` mutate the
+                // buffer while the viewport stays parked — when the user later
+                // scrolls back down (or the stream finishes) the screen and
+                // the tracked row counter desync and the UI corrupts.
+                let _ = renderer.scroll_to_bottom();
                 match event {
                     AgentEvent::Reasoning(text) => {
                         if !show_reasoning {
@@ -505,22 +628,12 @@ pub async fn run_interactive(
                     }
                     AgentEvent::ToolResult { output } => {
                         let show_details = cfg.show_tool_details.unwrap_or(false);
-                        if show_details {
-                            let sanitized = sanitize_output(&output);
-                            let char_count = sanitized.chars().count();
-                            let preview: String = sanitized.chars().take(120).collect();
-                            let preview_trimmed = if char_count > 120 {
-                                format!("{}...", preview)
-                            } else {
-                                preview
-                            };
-                            let summary = if char_count > 120 {
-                                format!("◈ result ({} chars): {}", char_count, preview_trimmed)
-                            } else {
-                                preview_trimmed
-                            };
-                            renderer.write_line(&summary, Color::DarkGrey)?;
-                        }
+                        let summary = summarize_tool_result(&output, show_details);
+                        let (line, color) = match summary {
+                            ToolResultSummary::Ok(s) => (format!("  └ {}", s), Color::DarkGrey),
+                            ToolResultSummary::Err(s) => (format!("  └ ✗ {}", s), C_ERROR),
+                        };
+                        renderer.write_line(&sanitize_output(&line), color)?;
                     }
                     AgentEvent::Done { response, tokens, cost } => {
                         was_reasoning = false;

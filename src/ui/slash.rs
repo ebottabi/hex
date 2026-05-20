@@ -747,16 +747,24 @@ pub async fn handle_slash(
             let rest = parts[1..].join(" ");
             let mut scope_tokens: Vec<String> = Vec::new();
             let mut report_override: Option<std::path::PathBuf> = None;
+            let mut roe_tokens: Vec<String> = Vec::new();
+            let mut hit_freeform = false;
             for tok in rest.split_whitespace() {
                 if let Some(p) = tok.strip_prefix("report=") {
                     report_override = Some(std::path::PathBuf::from(p));
-                } else {
+                } else if let Some(r) = tok.strip_prefix("roe=") {
+                    if !r.is_empty() {
+                        roe_tokens.push(r.to_string());
+                    }
+                } else if !hit_freeform && looks_like_scope_token(tok) {
                     scope_tokens.push(tok.to_string());
+                } else {
+                    hit_freeform = true;
                 }
             }
             let policy = match crate::pentest::engagement::EngagementPolicy::from_parts(
                 &scope_tokens,
-                &[],
+                &roe_tokens,
             ) {
                 Ok(p) => p,
                 Err(e) => {
@@ -817,15 +825,40 @@ pub async fn handle_slash(
                 Some(sec_ctx),
             );
 
-            let mut executor = crate::pentest::agent_executor::AgentExecutor::new(pentest_agent);
+            let (status_tx, mut status_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let mut executor =
+                crate::pentest::agent_executor::AgentExecutor::new(pentest_agent)
+                    .with_status(status_tx);
 
             renderer.write_line(
                 "running pentest pipeline (recon → validate → assess)...",
                 C_AGENT,
             )?;
-            match crate::pentest::pipeline::run(&policy, &mut executor, &mut evidence, &report_path)
-                .await
-            {
+            let pipeline_fut = crate::pentest::pipeline::run(
+                &policy,
+                &mut executor,
+                &mut evidence,
+                &report_path,
+            );
+            tokio::pin!(pipeline_fut);
+
+            let result = loop {
+                tokio::select! {
+                    biased;
+                    Some(msg) = status_rx.recv() => {
+                        renderer.write_line(&msg, C_RESULT)?;
+                    }
+                    r = &mut pipeline_fut => {
+                        // Drain any remaining queued status lines.
+                        while let Ok(msg) = status_rx.try_recv() {
+                            renderer.write_line(&msg, C_RESULT)?;
+                        }
+                        break r;
+                    }
+                }
+            };
+            match result {
                 Ok(out) => {
                     renderer.write_line(
                         &format!(
@@ -853,4 +886,24 @@ pub async fn handle_slash(
         }
     }
     Ok(())
+}
+
+fn looks_like_scope_token(tok: &str) -> bool {
+    // Accept: bare hostnames (foo.bar.com), CIDRs (10.0.0.0/24), IPs (1.2.3.4),
+    // optional :port suffix. Reject anything containing whitespace, '=' (handled
+    // upstream), or that lacks at least one '.' or ':' (so freeform words like
+    // "scan", "for", "vul" are filtered out).
+    if tok.is_empty() {
+        return false;
+    }
+    let head = tok.split('/').next().unwrap_or("");
+    let host = head.split(':').next().unwrap_or("");
+    if host.is_empty() {
+        return false;
+    }
+    if !(host.contains('.') || host.contains(':')) {
+        return false;
+    }
+    host.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
 }

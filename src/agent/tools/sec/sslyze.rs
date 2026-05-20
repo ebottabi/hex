@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct SslyzeArgs {
     pub target: String,
     #[serde(default)]
@@ -18,7 +20,7 @@ pub struct SslyzeArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SslyzeCert {
     pub subject: Option<String>,
     pub issuer: Option<String>,
@@ -29,20 +31,20 @@ pub struct SslyzeCert {
     pub sha256_fingerprint: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SslyzeProtocolSupport {
     pub protocol: String,
     pub supported: bool,
     pub cipher_count: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SslyzeVuln {
     pub name: String,
     pub is_vulnerable: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SslyzeOutput {
     pub hostname: String,
     pub ip: Option<String>,
@@ -74,10 +76,9 @@ impl Tool for SslyzeTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "sslyze TLS scanner. Returns typed certificate chain, protocol support \
+            description: append_output_schema::<SslyzeOutput>("sslyze TLS scanner. Returns typed certificate chain, protocol support \
                           matrix, and known-vulnerability checks (HEARTBLEED, ROBOT, CCS \
-                          injection, OpenSSL renegotiation). Target host must be in scope."
-                .to_string(),
+                          injection, OpenSSL renegotiation). Target host must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

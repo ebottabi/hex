@@ -1,18 +1,20 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct ChecksecArgs {
     pub file: String,
     #[serde(default)]
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ChecksecOutput {
     pub file: String,
     pub relro: Option<String>,
@@ -49,10 +51,9 @@ impl Tool for ChecksecTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "checksec.sh binary hardening checker. Returns RELRO, stack canary, \
+            description: append_output_schema::<ChecksecOutput>("checksec.sh binary hardening checker. Returns RELRO, stack canary, \
                           NX, PIE, RPATH/RUNPATH, symbols, and FORTIFY_SOURCE status for an \
-                          ELF/Mach-O binary. Local only."
-                .to_string(),
+                          ELF/Mach-O binary. Local only."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct ImpacketArgs {
     pub action: String,
     pub target: String,
@@ -29,7 +31,7 @@ pub struct ImpacketArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct DumpedCredential {
     pub user: String,
     pub domain: Option<String>,
@@ -38,20 +40,20 @@ pub struct DumpedCredential {
     pub nt_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SpnEntry {
     pub spn: String,
     pub user: Option<String>,
     pub kerberoast_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AsRepEntry {
     pub user: String,
     pub asrep_hash: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ImpacketOutput {
     pub action: String,
     pub credentials: Vec<DumpedCredential>,
@@ -82,11 +84,10 @@ impl Tool for ImpacketTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Impacket suite dispatcher. Supported actions: secretsdump (dump NTDS / \
+            description: append_output_schema::<ImpacketOutput>("Impacket suite dispatcher. Supported actions: secretsdump (dump NTDS / \
                           LSA / SAM hashes), getuserspns (Kerberoasting), getnpusers (ASREP \
                           roasting). Returns typed credentials / SPN tickets / ASREP hashes. \
-                          Target host must be in scope."
-                .to_string(),
+                          Target host must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

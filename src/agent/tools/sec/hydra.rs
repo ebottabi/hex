@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct HydraArgs {
     pub target: String,
     pub service: String,
@@ -31,7 +33,7 @@ pub struct HydraArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HydraCred {
     pub host: String,
     pub port: Option<u16>,
@@ -40,7 +42,7 @@ pub struct HydraCred {
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HydraOutput {
     pub credentials: Vec<HydraCred>,
     pub attempts: Option<u64>,
@@ -68,11 +70,10 @@ impl Tool for HydraTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Online password attack via hydra. Supports ssh, ftp, http-get, \
+            description: append_output_schema::<HydraOutput>("Online password attack via hydra. Supports ssh, ftp, http-get, \
                           http-post-form, smb, rdp, mysql, postgres, etc. Returns typed found \
                           credentials. Target host must be in scope and the engagement RoE must \
-                          permit online password attempts."
-                .to_string(),
+                          permit online password attempts."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

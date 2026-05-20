@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct NmapArgs {
     pub targets: Vec<String>,
     #[serde(default)]
@@ -24,7 +26,7 @@ pub struct NmapArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Port {
     pub port: u16,
     pub protocol: String,
@@ -34,7 +36,7 @@ pub struct Port {
     pub product: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Host {
     pub address: String,
     pub hostname: Option<String>,
@@ -42,7 +44,7 @@ pub struct Host {
     pub ports: Vec<Port>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 pub struct NmapOutput {
     pub hosts: Vec<Host>,
     pub raw_command: String,
@@ -69,9 +71,8 @@ impl Tool for NmapTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run nmap against in-scope targets. Returns parsed hosts/ports/services. \
-                 Requires an active pentest engagement policy and all targets must be in scope."
-                .to_string(),
+            description: append_output_schema::<NmapOutput>("Run nmap against in-scope targets. Returns parsed hosts/ports/services. \
+                 Requires an active pentest engagement policy and all targets must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

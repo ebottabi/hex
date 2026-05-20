@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct DnsxArgs {
     pub hosts: Vec<String>,
     #[serde(default)]
@@ -16,7 +18,7 @@ pub struct DnsxArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct DnsxRecord {
     pub host: String,
     #[serde(default)]
@@ -33,7 +35,7 @@ pub struct DnsxRecord {
     pub txt: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct DnsxOutput {
     pub records: Vec<DnsxRecord>,
     pub raw_command: String,
@@ -60,9 +62,8 @@ impl Tool for DnsxTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Batch DNS resolution via dnsx. Returns A/AAAA/CNAME/MX/NS/TXT per host. \
-                          All hosts must be in scope."
-                .to_string(),
+            description: append_output_schema::<DnsxOutput>("Batch DNS resolution via dnsx. Returns A/AAAA/CNAME/MX/NS/TXT per host. \
+                          All hosts must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

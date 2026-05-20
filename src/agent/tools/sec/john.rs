@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct JohnArgs {
     pub hash_file: String,
     #[serde(default)]
@@ -22,13 +24,13 @@ pub struct JohnArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct JohnCracked {
     pub user: String,
     pub plaintext: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct JohnOutput {
     pub cracked: Vec<JohnCracked>,
     pub raw_command: String,
@@ -56,9 +58,8 @@ impl Tool for JohnTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "John the Ripper offline cracker. Runs the cracker, then `john --show` \
-                          to enumerate recovered credentials. Returns user:plaintext pairs."
-                .to_string(),
+            description: append_output_schema::<JohnOutput>("John the Ripper offline cracker. Runs the cracker, then `john --show` \
+                          to enumerate recovered credentials. Returns user:plaintext pairs."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

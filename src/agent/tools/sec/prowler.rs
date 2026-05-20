@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct ProwlerArgs {
     pub provider: String,
     #[serde(default)]
@@ -26,7 +28,7 @@ pub struct ProwlerArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProwlerFinding {
     pub check_id: String,
     pub status: String,
@@ -40,7 +42,7 @@ pub struct ProwlerFinding {
     pub compliance: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProwlerOutput {
     pub provider: String,
     pub findings: Vec<ProwlerFinding>,
@@ -71,12 +73,11 @@ impl Tool for ProwlerTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Prowler cloud security posture scanner (AWS / Azure / GCP / \
+            description: append_output_schema::<ProwlerOutput>("Prowler cloud security posture scanner (AWS / Azure / GCP / \
                           Kubernetes). Requires the provider's credentials to be configured in \
                           the environment. Returns typed findings with check_id, status, \
                           severity, resource, and compliance mappings. Use `services` / `checks` \
-                          / `severity` / `compliance` to narrow scope."
-                .to_string(),
+                          / `severity` / `compliance` to narrow scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

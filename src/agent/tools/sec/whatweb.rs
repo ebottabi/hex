@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -8,7 +10,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct WhatwebArgs {
     pub targets: Vec<String>,
     #[serde(default)]
@@ -19,14 +21,14 @@ pub struct WhatwebArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WhatwebResult {
     pub target: String,
     pub http_status: Option<u16>,
     pub plugins: BTreeMap<String, Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WhatwebOutput {
     pub results: Vec<WhatwebResult>,
     pub raw_command: String,
@@ -53,9 +55,8 @@ impl Tool for WhatwebTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Identify web technologies via whatweb. Returns typed plugin/tech \
-                          fingerprints per in-scope target."
-                .to_string(),
+            description: append_output_schema::<WhatwebOutput>("Identify web technologies via whatweb. Returns typed plugin/tech \
+                          fingerprints per in-scope target."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

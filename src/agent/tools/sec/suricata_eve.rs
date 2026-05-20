@@ -1,12 +1,14 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct SuricataEveArgs {
     pub eve_path: String,
     #[serde(default)]
@@ -21,7 +23,7 @@ pub struct SuricataEveArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SuricataAlert {
     pub timestamp: String,
     pub src_ip: String,
@@ -35,7 +37,7 @@ pub struct SuricataAlert {
     pub severity: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SuricataEveOutput {
     pub eve_path: String,
     pub total_events: usize,
@@ -66,11 +68,10 @@ impl Tool for SuricataEveTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Parse a Suricata eve.json log (JSONL). Returns alert list with \
+            description: append_output_schema::<SuricataEveOutput>("Parse a Suricata eve.json log (JSONL). Returns alert list with \
                           signature/category/severity, an event-type histogram, and a sample \
                           of non-alert events (HTTP/DNS/TLS/...). Filter via `event_types`, \
-                          `min_severity` (1=high..3=low), or `since` (ISO8601 prefix match)."
-                .to_string(),
+                          `min_severity` (1=high..3=low), or `since` (ISO8601 prefix match)."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct KerbruteArgs {
     pub mode: String,
     pub domain: String,
@@ -26,7 +28,7 @@ pub struct KerbruteArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct KerbruteResult {
     pub kind: String,
     pub user: String,
@@ -34,7 +36,7 @@ pub struct KerbruteResult {
     pub domain: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct KerbruteOutput {
     pub results: Vec<KerbruteResult>,
     pub raw_command: String,
@@ -62,10 +64,9 @@ impl Tool for KerbruteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Kerbrute — Kerberos username enumeration and password spraying against \
+            description: append_output_schema::<KerbruteOutput>("Kerbrute — Kerberos username enumeration and password spraying against \
                           an AD domain controller. Modes: userenum, passwordspray, bruteuser. \
-                          DC must be in scope."
-                .to_string(),
+                          DC must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

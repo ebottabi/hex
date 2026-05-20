@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct NiktoArgs {
     pub target: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct NiktoArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NiktoFinding {
     pub id: Option<String>,
     pub osvdb: Option<String>,
@@ -30,7 +32,7 @@ pub struct NiktoFinding {
     pub references: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NiktoOutput {
     pub host: String,
     pub ip: Option<String>,
@@ -61,10 +63,9 @@ impl Tool for NiktoTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run nikto web server scanner against a single in-scope host. Returns \
+            description: append_output_schema::<NiktoOutput>("Run nikto web server scanner against a single in-scope host. Returns \
                           typed findings with OSVDB IDs, URIs, and references. Target host must \
-                          be in scope."
-                .to_string(),
+                          be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

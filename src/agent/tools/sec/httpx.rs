@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct HttpxArgs {
     pub urls: Vec<String>,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct HttpxArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HttpxProbe {
     pub url: String,
     pub status: Option<u16>,
@@ -32,7 +34,7 @@ pub struct HttpxProbe {
     pub tls_subject: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HttpxOutput {
     pub probes: Vec<HttpxProbe>,
     pub raw_command: String,
@@ -59,9 +61,8 @@ impl Tool for HttpxTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "HTTP probe via httpx (ProjectDiscovery). Returns status, title, server, \
-                          detected tech, and final URL per target. All targets must be in scope."
-                .to_string(),
+            description: append_output_schema::<HttpxOutput>("HTTP probe via httpx (ProjectDiscovery). Returns status, title, server, \
+                          detected tech, and final URL per target. All targets must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

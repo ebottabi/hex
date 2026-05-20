@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct NucleiArgs {
     pub targets: Vec<String>,
     #[serde(default)]
@@ -22,7 +24,7 @@ pub struct NucleiArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NucleiFinding {
     pub template_id: String,
     pub name: Option<String>,
@@ -34,7 +36,7 @@ pub struct NucleiFinding {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NucleiOutput {
     pub findings: Vec<NucleiFinding>,
     pub raw_command: String,
@@ -61,10 +63,9 @@ impl Tool for NucleiTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run ProjectDiscovery nuclei against in-scope HTTP(S) targets with \
+            description: append_output_schema::<NucleiOutput>("Run ProjectDiscovery nuclei against in-scope HTTP(S) targets with \
                           templated vulnerability checks. Returns typed findings (template id, \
-                          severity, matched URL). All targets must be in scope."
-                .to_string(),
+                          severity, matched URL). All targets must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

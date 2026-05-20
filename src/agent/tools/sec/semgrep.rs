@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct SemgrepArgs {
     pub path: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct SemgrepArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SemgrepFinding {
     pub check_id: String,
     pub path: String,
@@ -32,7 +34,7 @@ pub struct SemgrepFinding {
     pub owasp: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SemgrepOutput {
     pub findings: Vec<SemgrepFinding>,
     pub errors: Vec<String>,
@@ -60,10 +62,9 @@ impl Tool for SemgrepTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Static analysis via semgrep. Scans a local code path and returns typed \
+            description: append_output_schema::<SemgrepOutput>("Static analysis via semgrep. Scans a local code path and returns typed \
                           findings with check id, file, line range, severity, and CWE/OWASP tags. \
-                          Requires an active pentest engagement."
-                .to_string(),
+                          Requires an active pentest engagement."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

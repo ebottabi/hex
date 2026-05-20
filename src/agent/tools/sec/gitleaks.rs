@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct GitleaksArgs {
     pub source: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct GitleaksArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GitleaksFinding {
     pub rule_id: String,
     pub description: Option<String>,
@@ -35,7 +37,7 @@ pub struct GitleaksFinding {
     pub entropy: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GitleaksOutput {
     pub findings: Vec<GitleaksFinding>,
     pub raw_command: String,
@@ -62,10 +64,9 @@ impl Tool for GitleaksTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Scan a directory or git repo for committed secrets via gitleaks. \
+            description: append_output_schema::<GitleaksOutput>("Scan a directory or git repo for committed secrets via gitleaks. \
                           Returns typed findings (rule id, file, line range, optional commit \
-                          metadata, redacted secret). Requires an active pentest engagement."
-                .to_string(),
+                          metadata, redacted secret). Requires an active pentest engagement."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

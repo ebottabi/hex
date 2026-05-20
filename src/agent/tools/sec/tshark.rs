@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct TsharkArgs {
     pub pcap: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct TsharkArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TsharkOutput {
     pub pcap: String,
     pub format: String,
@@ -50,12 +52,11 @@ impl Tool for TsharkTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "tshark pcap reader. Parses a capture file with optional display \
+            description: append_output_schema::<TsharkOutput>("tshark pcap reader. Parses a capture file with optional display \
                           filter (-Y) and field selection (-e). Default format is `ek` \
                           (Elasticsearch JSONL, one JSON object per packet). Use `format: \
                           'fields'` with `fields: ['ip.src','tcp.dstport',...]` for tabular \
-                          extraction. Caps at 5000 packets by default."
-                .to_string(),
+                          extraction. Caps at 5000 packets by default."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

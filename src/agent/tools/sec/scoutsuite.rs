@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct ScoutsuiteArgs {
     pub provider: String,
     #[serde(default)]
@@ -18,7 +20,7 @@ pub struct ScoutsuiteArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ScoutsuiteFinding {
     pub service: String,
     pub finding_id: String,
@@ -28,7 +30,7 @@ pub struct ScoutsuiteFinding {
     pub checked_items: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ScoutsuiteOutput {
     pub provider: String,
     pub account_id: Option<String>,
@@ -59,11 +61,10 @@ impl Tool for ScoutsuiteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Scout Suite multi-cloud security auditor (AWS / Azure / GCP / \
+            description: append_output_schema::<ScoutsuiteOutput>("Scout Suite multi-cloud security auditor (AWS / Azure / GCP / \
                           AliCloud / OCI). Provider credentials must be configured. Returns \
                           typed findings per service with severity (danger/warning) and counts \
-                          of flagged vs checked items."
-                .to_string(),
+                          of flagged vs checked items."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

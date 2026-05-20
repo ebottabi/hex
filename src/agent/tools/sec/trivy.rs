@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct TrivyArgs {
     pub target: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct TrivyArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TrivyVuln {
     pub vulnerability_id: String,
     pub pkg_name: String,
@@ -33,7 +35,7 @@ pub struct TrivyVuln {
     pub class: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TrivySecret {
     pub rule_id: String,
     pub category: Option<String>,
@@ -45,7 +47,7 @@ pub struct TrivySecret {
     pub match_: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TrivyMisconfig {
     pub id: String,
     pub title: String,
@@ -55,14 +57,14 @@ pub struct TrivyMisconfig {
     pub resolution: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, JsonSchema)]
 pub struct TrivyParsed {
     pub vulnerabilities: Vec<TrivyVuln>,
     pub secrets: Vec<TrivySecret>,
     pub misconfigurations: Vec<TrivyMisconfig>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TrivyOutput {
     pub vulnerabilities: Vec<TrivyVuln>,
     pub secrets: Vec<TrivySecret>,
@@ -91,10 +93,9 @@ impl Tool for TrivyTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run trivy (vulns, secrets, misconfig) against a filesystem path, image, \
+            description: append_output_schema::<TrivyOutput>("Run trivy (vulns, secrets, misconfig) against a filesystem path, image, \
                           or repo. Returns typed vulnerabilities, secrets, and misconfigurations. \
-                          Requires an active pentest engagement."
-                .to_string(),
+                          Requires an active pentest engagement."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

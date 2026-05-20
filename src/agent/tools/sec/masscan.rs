@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct MasscanArgs {
     pub targets: Vec<String>,
     pub ports: String,
@@ -17,7 +19,7 @@ pub struct MasscanArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct MasscanHit {
     pub ip: String,
     pub port: u16,
@@ -25,7 +27,7 @@ pub struct MasscanHit {
     pub timestamp: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct MasscanOutput {
     pub hits: Vec<MasscanHit>,
     pub raw_command: String,
@@ -52,10 +54,8 @@ impl Tool for MasscanTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description:
-                "High-rate TCP port sweep with masscan. Returns parsed hits as JSON. Requires \
-                 root and an active engagement policy; all targets must be in scope."
-                    .to_string(),
+            description: append_output_schema::<MasscanOutput>("High-rate TCP port sweep with masscan. Returns parsed hits as JSON. Requires \
+                 root and an active engagement policy; all targets must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct R2Args {
     pub file: String,
     pub commands: String,
@@ -17,7 +19,7 @@ pub struct R2Args {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct R2Output {
     pub file: String,
     pub stdout: String,
@@ -46,11 +48,10 @@ impl Tool for R2Tool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "radare2 batch executor. Runs r2 -q with the given commands against \
+            description: append_output_schema::<R2Output>("radare2 batch executor. Runs r2 -q with the given commands against \
                           a binary. Use `aaa` for analysis, `iIj`/`aflj`/`izzj` for JSON output \
                           (those will be parsed into the `json` field if the final stdout is \
-                          JSON). Local only. Use `write=true` for `-w` (write mode). "
-                .to_string(),
+                          JSON). Local only. Use `write=true` for `-w` (write mode). "),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

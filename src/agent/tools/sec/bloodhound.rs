@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -9,7 +11,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct BloodhoundArgs {
     pub domain: String,
     pub domain_controller: String,
@@ -29,7 +31,7 @@ pub struct BloodhoundArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct BloodhoundOutput {
     pub output_dir: String,
     pub files: Vec<String>,
@@ -59,10 +61,9 @@ impl Tool for BloodhoundTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Run bloodhound-python (BloodHound.py) AD collector against an in-scope \
+            description: append_output_schema::<BloodhoundOutput>("Run bloodhound-python (BloodHound.py) AD collector against an in-scope \
                           domain controller. Writes JSON files (users, computers, groups, \
-                          domains, gpos, ous) and returns per-category object counts."
-                .to_string(),
+                          domains, gpos, ous) and returns per-category object counts."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

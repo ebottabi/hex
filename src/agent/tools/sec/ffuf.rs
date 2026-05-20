@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct FfufArgs {
     pub url: String,
     pub wordlist: String,
@@ -25,7 +27,7 @@ pub struct FfufArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FfufHit {
     pub url: String,
     pub input: Option<String>,
@@ -37,7 +39,7 @@ pub struct FfufHit {
     pub redirect_location: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FfufOutput {
     pub hits: Vec<FfufHit>,
     pub raw_command: String,
@@ -64,10 +66,9 @@ impl Tool for FfufTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Fast web fuzzer (ffuf). Use FUZZ keyword in the URL to mark the \
+            description: append_output_schema::<FfufOutput>("Fast web fuzzer (ffuf). Use FUZZ keyword in the URL to mark the \
                           injection point (e.g. https://target/FUZZ). Target host must be in \
-                          scope. Returns typed hits with status, length, and content type."
-                .to_string(),
+                          scope. Returns typed hits with status, length, and content type."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

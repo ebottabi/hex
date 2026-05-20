@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct HashcatArgs {
     pub hash_file: String,
     pub hash_mode: u32,
@@ -25,13 +27,13 @@ pub struct HashcatArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct CrackedHash {
     pub hash: String,
     pub plaintext: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HashcatOutput {
     pub cracked: Vec<CrackedHash>,
     pub outfile_path: String,
@@ -60,11 +62,10 @@ impl Tool for HashcatTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Offline password cracker (hashcat). Specify hash mode (-m), attack mode \
+            description: append_output_schema::<HashcatOutput>("Offline password cracker (hashcat). Specify hash mode (-m), attack mode \
                           (0=straight, 1=combination, 3=brute-force, 6=hybrid-wordlist-mask, \
                           7=hybrid-mask-wordlist), and wordlist or mask. Returns hash:plaintext \
-                          pairs. Requires an active pentest engagement."
-                .to_string(),
+                          pairs. Requires an active pentest engagement."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct AflFuzzArgs {
     pub input_dir: String,
     pub output_dir: String,
@@ -22,7 +24,7 @@ pub struct AflFuzzArgs {
     pub fuzzer_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AflFuzzOutput {
     pub output_dir: String,
     pub crashes_dir: String,
@@ -57,11 +59,10 @@ impl Tool for AflFuzzTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Bounded AFL++ fuzz harness. Runs afl-fuzz against an instrumented \
+            description: append_output_schema::<AflFuzzOutput>("Bounded AFL++ fuzz harness. Runs afl-fuzz against an instrumented \
                           binary for `timeout_secs` (default 60s), then enumerates crashes/, \
                           hangs/, queue/ and parses fuzzer_stats. The target binary must already \
-                          be instrumented (afl-cc/afl-clang-fast). Local only."
-                .to_string(),
+                          be instrumented (afl-cc/afl-clang-fast). Local only."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct RopperArgs {
     pub file: String,
     #[serde(default)]
@@ -22,14 +24,14 @@ pub struct RopperArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct Gadget {
     pub address: String,
     pub instructions: String,
     pub bytes: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RopperOutput {
     pub file: String,
     pub arch: Option<String>,
@@ -59,10 +61,9 @@ impl Tool for RopperTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Ropper ROP gadget finder. Returns address+instructions for gadgets \
+            description: append_output_schema::<RopperOutput>("Ropper ROP gadget finder. Returns address+instructions for gadgets \
                           discovered in an ELF/Mach-O/PE binary. Use `search` to filter (e.g. \
-                          'pop rdi; ret'). Local only."
-                .to_string(),
+                          'pop rdi; ret'). Local only."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

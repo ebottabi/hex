@@ -4,6 +4,7 @@ mod find_files;
 mod grep;
 mod list_dir;
 mod read;
+pub mod schema;
 pub mod sec;
 mod todo;
 mod write;

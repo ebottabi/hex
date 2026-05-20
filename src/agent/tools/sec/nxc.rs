@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct NxcArgs {
     pub protocol: String,
     pub targets: Vec<String>,
@@ -29,7 +31,7 @@ pub struct NxcArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NxcResult {
     pub protocol: String,
     pub host: String,
@@ -40,7 +42,7 @@ pub struct NxcResult {
     pub message: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NxcOutput {
     pub results: Vec<NxcResult>,
     pub raw_command: String,
@@ -67,11 +69,10 @@ impl Tool for NxcTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "NetExec (nxc / crackmapexec) — authenticate, enumerate, and run modules \
+            description: append_output_schema::<NxcOutput>("NetExec (nxc / crackmapexec) — authenticate, enumerate, and run modules \
                           across SMB/WinRM/LDAP/MSSQL/SSH/RDP/FTP. Returns typed per-host results \
                           with success/info/fail status and Pwn3d! detection. Targets must be in \
-                          scope."
-                .to_string(),
+                          scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

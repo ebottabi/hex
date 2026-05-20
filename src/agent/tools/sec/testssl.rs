@@ -1,5 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
@@ -7,7 +9,7 @@ use crate::agent::tools::sec::{
     SecContext, check_targets_in_scope, preflight, record, require_policy, run_shell, shq,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct TestsslArgs {
     pub target: String,
     #[serde(default)]
@@ -20,7 +22,7 @@ pub struct TestsslArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TestsslFinding {
     pub id: String,
     pub ip: Option<String>,
@@ -31,7 +33,7 @@ pub struct TestsslFinding {
     pub cwe: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TestsslOutput {
     pub findings: Vec<TestsslFinding>,
     pub raw_command: String,
@@ -58,10 +60,9 @@ impl Tool for TestsslTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "TLS/SSL posture scan via testssl.sh. Returns typed findings with \
+            description: append_output_schema::<TestsslOutput>("TLS/SSL posture scan via testssl.sh. Returns typed findings with \
                           severity (OK/INFO/LOW/MEDIUM/HIGH/CRITICAL), CVE/CWE references, and \
-                          per-check IDs. Target host must be in scope."
-                .to_string(),
+                          per-check IDs. Target host must be in scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

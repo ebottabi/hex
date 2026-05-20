@@ -1,11 +1,13 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::{SecContext, preflight, record, require_policy, run_shell, shq};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct SearchsploitArgs {
     pub query: String,
     #[serde(default)]
@@ -22,7 +24,7 @@ pub struct SearchsploitArgs {
     pub timeout_secs: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExploitEntry {
     pub edb_id: String,
     pub title: String,
@@ -33,7 +35,7 @@ pub struct ExploitEntry {
     pub platform: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SearchsploitOutput {
     pub exploits: Vec<ExploitEntry>,
     pub shellcodes: Vec<ExploitEntry>,
@@ -61,10 +63,9 @@ impl Tool for SearchsploitTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Local offline ExploitDB search via searchsploit -j (JSON). Returns \
+            description: append_output_schema::<SearchsploitOutput>("Local offline ExploitDB search via searchsploit -j (JSON). Returns \
                           typed entries with EDB ID, title, path, date, author, platform, type. \
-                          Local only; no scope check (queries the local exploit database)."
-                .to_string(),
+                          Local only; no scope check (queries the local exploit database)."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

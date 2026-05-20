@@ -1,19 +1,21 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
+use schemars::JsonSchema;
+use crate::agent::tools::schema::append_output_schema;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::tools::ToolError;
 use crate::agent::tools::sec::SecContext;
 use crate::pentest::engagement::EngagementPolicy;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub struct SetScopeArgs {
     pub targets: Vec<String>,
     #[serde(default)]
     pub rules_of_engagement: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct SetScopeOutput {
     pub ok: bool,
     pub active_scope: Vec<String>,
@@ -40,13 +42,12 @@ impl Tool for SetScopeTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Set or update the authorized engagement scope for this session. Call \
+            description: append_output_schema::<SetScopeOutput>("Set or update the authorized engagement scope for this session. Call \
                           this when the user grants targets in natural language (e.g. 'the target \
                           is api.example.com' or 'scope: 10.0.0.0/24'). Once set, every subsequent \
                           security tool call (nmap, httpx, nuclei, searchsploit, ...) will use \
                           this scope. Pass an array of hostnames, IPs, or CIDRs. Idempotent — \
-                          calling again replaces the scope."
-                .to_string(),
+                          calling again replaces the scope."),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

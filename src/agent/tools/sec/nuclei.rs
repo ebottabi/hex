@@ -123,7 +123,28 @@ impl Tool for NucleiTool {
             shq(&stdin),
             argv.iter().map(|s| shq(s)).collect::<Vec<_>>().join(" ")
         );
-        let outcome = run_shell(&self.ctx, &cmd, args.timeout_secs.unwrap_or(600)).await?;
+        let mut outcome = run_shell(&self.ctx, &cmd, args.timeout_secs.unwrap_or(600)).await?;
+
+        // Recover from missing-templates first-run condition by auto-updating
+        // templates once and retrying. Nuclei surfaces this on stderr (and
+        // sometimes stdout) as: "no templates provided for scan" /
+        // "could not find templates".
+        let needs_templates = {
+            let blob = format!("{}\n{}", outcome.stderr, outcome.stdout).to_ascii_lowercase();
+            blob.contains("no templates provided for scan")
+                || blob.contains("could not find templates")
+                || blob.contains("no templates found")
+        };
+        if needs_templates {
+            let _ = run_shell(
+                &self.ctx,
+                "nuclei -update-templates -silent -disable-update-check",
+                300,
+            )
+            .await;
+            outcome = run_shell(&self.ctx, &cmd, args.timeout_secs.unwrap_or(600)).await?;
+        }
+
         let findings = parse_nuclei_jsonl(&outcome.stdout);
 
         let summary = format!("nuclei: {} finding(s)", findings.len());

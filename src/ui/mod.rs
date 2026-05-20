@@ -213,6 +213,323 @@ fn first_line(s: &str, max_chars: usize) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// How many body lines to show inline before tailing with "+N more".
+const TOOL_BODY_MAX: usize = 14;
+
+/// Render the multi-line "tool calling" block: a header line with the tool
+/// name in yellow followed by each argument on its own indented dark-grey
+/// line. The companion `render_tool_result_block` writes the trailing result
+/// box once the tool returns. This is the standard rendering (no flag) — both
+/// coding and pentest sessions are tool-heavy and benefit from seeing what
+/// just fired and what came back.
+fn render_tool_call_block(
+    renderer: &mut Renderer,
+    name: &str,
+    args: &serde_json::Value,
+) -> io::Result<()> {
+    renderer.write_line(&format!("◈ {}", name), C_TOOL)?;
+    let pairs = arg_pairs(args);
+    let width = pairs
+        .iter()
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
+    for (k, v) in pairs {
+        let pad = " ".repeat(width.saturating_sub(k.chars().count()));
+        let line = format!("    {}{} : {}", k, pad, v);
+        renderer.write_line(&sanitize_output(&line), Color::DarkGrey)?;
+    }
+    Ok(())
+}
+
+/// Render the "result" block under a tool call: a status line then up to
+/// TOOL_BODY_MAX body lines (pretty-printed for typed structured outputs,
+/// raw-tailed for plain stdout). Failures are surfaced in red with the actual
+/// error so the user never has to guess why the tool didn't do anything.
+fn render_tool_result_block(renderer: &mut Renderer, output: &str) -> io::Result<()> {
+    let parsed = parse_tool_result(output);
+    let (status_color, status_line) = if parsed.error.is_some() {
+        (C_ERROR, format!("  ─ ✗ {}", parsed.headline))
+    } else {
+        (Color::DarkGrey, format!("  ─ {}", parsed.headline))
+    };
+    renderer.write_line(&sanitize_output(&status_line), status_color)?;
+
+    let body_total = parsed.body.len();
+    for line in parsed.body.iter().take(TOOL_BODY_MAX) {
+        let l = format!("    │ {}", line);
+        renderer.write_line(&sanitize_output(&l), Color::DarkGrey)?;
+    }
+    if body_total > TOOL_BODY_MAX {
+        let l = format!(
+            "    │ … +{} more line(s) (full output in trace)",
+            body_total - TOOL_BODY_MAX
+        );
+        renderer.write_line(&sanitize_output(&l), Color::DarkGrey)?;
+    }
+    Ok(())
+}
+
+/// Flatten the tool-call args JSON into [(key, rendered_value)] pairs suitable
+/// for the multi-line block. Drops null/empty values, compacts arrays/objects
+/// to one-line JSON, truncates long strings.
+fn arg_pairs(args: &serde_json::Value) -> Vec<(String, String)> {
+    let obj = match args {
+        serde_json::Value::Object(m) => m,
+        _ => return Vec::new(),
+    };
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (k, v) in obj {
+        let rendered = match v {
+            serde_json::Value::Null => continue,
+            serde_json::Value::String(s) => {
+                if s.is_empty() {
+                    continue;
+                }
+                let s = s.replace('\n', " ");
+                if s.chars().count() > 200 {
+                    let head: String = s.chars().take(200).collect();
+                    format!("\"{}…\"", head)
+                } else {
+                    format!("\"{}\"", s)
+                }
+            }
+            serde_json::Value::Array(a) => {
+                if a.is_empty() {
+                    continue;
+                }
+                serde_json::to_string(v).unwrap_or_default()
+            }
+            serde_json::Value::Object(o) => {
+                if o.is_empty() {
+                    continue;
+                }
+                serde_json::to_string(v).unwrap_or_default()
+            }
+            _ => v.to_string(),
+        };
+        out.push((k.clone(), rendered));
+    }
+    out
+}
+
+struct ToolResultRendered {
+    headline: String,
+    body: Vec<String>,
+    error: Option<String>,
+}
+
+/// Convert a serialized tool result (either ToolError JSON, structured-output
+/// JSON, or plain text) into a headline + pretty body lines.
+fn parse_tool_result(output: &str) -> ToolResultRendered {
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return ToolResultRendered {
+            headline: "done · empty result".to_string(),
+            body: Vec::new(),
+            error: None,
+        };
+    }
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(err) = val
+            .get("error")
+            .and_then(|v| v.as_str())
+            .or_else(|| val.get("Err").and_then(|v| v.as_str()))
+            .or_else(|| val.get("err").and_then(|v| v.as_str()))
+        {
+            let head = first_line(err, 200).into_owned();
+            let mut body: Vec<String> = err
+                .lines()
+                .skip(1)
+                .take(TOOL_BODY_MAX)
+                .map(|s| s.to_string())
+                .collect();
+            if let Some(hint) = val.get("hint").and_then(|v| v.as_str()) {
+                body.push(hint.to_string());
+            }
+            return ToolResultRendered {
+                headline: head.clone(),
+                body,
+                error: Some(head),
+            };
+        }
+
+        let mut bits: Vec<String> = Vec::new();
+        let mut body: Vec<String> = Vec::new();
+
+        if let Some(code) = val.get("exit_code").and_then(|v| v.as_i64()) {
+            if code != 0 {
+                let tail = val
+                    .get("stderr_tail")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| val.get("stderr").and_then(|v| v.as_str()))
+                    .map(|s| first_line(s, 200).into_owned())
+                    .unwrap_or_default();
+                let head = if tail.is_empty() {
+                    format!("exit {}", code)
+                } else {
+                    format!("exit {} — {}", code, tail)
+                };
+                let detail = val
+                    .get("stderr")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| val.get("stderr_tail").and_then(|v| v.as_str()))
+                    .map(|s| s.lines().map(|l| l.to_string()).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                return ToolResultRendered {
+                    headline: head.clone(),
+                    body: detail,
+                    error: Some(head),
+                };
+            }
+            bits.push(format!("exit {}", code));
+        }
+
+        // Known structured result keys.
+        if let Some(arr) = val.get("findings").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} finding(s)", arr.len()));
+            for f in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(format_finding(f));
+            }
+        } else if let Some(arr) = val.get("hosts").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} host(s)", arr.len()));
+            for h in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(format_host(h));
+            }
+        } else if let Some(arr) = val.get("urls").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} url(s)", arr.len()));
+            for u in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(u.as_str().unwrap_or("").to_string());
+            }
+        } else if let Some(arr) = val.get("subdomains").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} subdomain(s)", arr.len()));
+            for s in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(s.as_str().unwrap_or("").to_string());
+            }
+        } else if let Some(arr) = val.get("exploits").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} exploit(s)", arr.len()));
+            for e in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(format_exploit(e));
+            }
+        } else if let Some(arr) = val.get("entries").and_then(|v| v.as_array()) {
+            bits.insert(0, format!("{} entry(ies)", arr.len()));
+            for e in arr.iter().take(TOOL_BODY_MAX) {
+                body.push(serde_json::to_string(e).unwrap_or_default());
+            }
+        } else if let Some(scope) = val.get("active_scope").and_then(|v| v.as_array()) {
+            let names: Vec<String> = scope
+                .iter()
+                .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                .collect();
+            bits.insert(0, format!("scope: {}", names.join(", ")));
+            if let Some(msg) = val.get("message").and_then(|v| v.as_str()) {
+                body.push(msg.to_string());
+            }
+        }
+
+        // If we got nothing structured, fall back to stdout lines.
+        if body.is_empty() {
+            if let Some(stdout) = val.get("stdout").and_then(|v| v.as_str()) {
+                for line in stdout.lines() {
+                    body.push(line.to_string());
+                }
+                if bits.is_empty() {
+                    bits.push(format!("{} line(s)", body.len()));
+                }
+            } else if let Some(content) = val.get("content").and_then(|v| v.as_str()) {
+                for line in content.lines() {
+                    body.push(line.to_string());
+                }
+                if bits.is_empty() {
+                    bits.push(format!("{} line(s)", body.len()));
+                }
+            }
+        }
+
+        let headline = if bits.is_empty() {
+            format!("done · {} chars", trimmed.chars().count())
+        } else {
+            format!("done · {}", bits.join(" · "))
+        };
+        return ToolResultRendered {
+            headline,
+            body,
+            error: None,
+        };
+    }
+
+    // Plain text result.
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("error") || lower.starts_with("err:") {
+        let head = first_line(trimmed, 200).into_owned();
+        let body: Vec<String> = trimmed.lines().skip(1).map(|s| s.to_string()).collect();
+        return ToolResultRendered {
+            headline: head.clone(),
+            body,
+            error: Some(head),
+        };
+    }
+
+    let body: Vec<String> = trimmed.lines().map(|s| s.to_string()).collect();
+    let headline = format!("done · {} line(s)", body.len());
+    ToolResultRendered {
+        headline,
+        body,
+        error: None,
+    }
+}
+
+fn format_finding(f: &serde_json::Value) -> String {
+    let severity = f
+        .get("severity")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Info")
+        .to_ascii_uppercase();
+    let id = f.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let title = f.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let scope = f.get("scope").and_then(|v| v.as_str()).unwrap_or("");
+    let parts: Vec<&str> = [id, title]
+        .iter()
+        .copied()
+        .filter(|s| !s.is_empty())
+        .collect();
+    let head = parts.join(" — ");
+    if scope.is_empty() {
+        format!("[{}] {}", severity, head)
+    } else {
+        format!("[{}] {} · {}", severity, head, scope)
+    }
+}
+
+fn format_host(h: &serde_json::Value) -> String {
+    if let Some(s) = h.as_str() {
+        return s.to_string();
+    }
+    let addr = h.get("address").and_then(|v| v.as_str()).unwrap_or("");
+    let url = h.get("url").and_then(|v| v.as_str()).unwrap_or("");
+    let status = h.get("status_code").and_then(|v| v.as_i64());
+    let title = h.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let target = if !url.is_empty() { url } else { addr };
+    match (status, title.is_empty()) {
+        (Some(c), false) => format!("{}  [{}] {}", target, c, title),
+        (Some(c), true) => format!("{}  [{}]", target, c),
+        (None, false) => format!("{}  {}", target, title),
+        (None, true) => target.to_string(),
+    }
+}
+
+fn format_exploit(e: &serde_json::Value) -> String {
+    let id = e.get("edb_id").and_then(|v| v.as_str()).unwrap_or("");
+    let title = e.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let platform = e.get("platform").and_then(|v| v.as_str()).unwrap_or("");
+    if platform.is_empty() {
+        format!("EDB-{} {}", id, title)
+    } else {
+        format!("EDB-{} [{}] {}", id, platform, title)
+    }
+}
+
 fn refresh_display(
     renderer: &mut Renderer,
     input: &InputEditor,
@@ -623,17 +940,10 @@ pub async fn run_interactive(
                         }
                         response_buf.clear();
                         response_start_line = None;
-                        let line = format!("◈ {}", format_tool_call_summary(&name, &args));
-                        renderer.write_line(&sanitize_output(&line), C_TOOL)?;
+                        render_tool_call_block(&mut renderer, &name, &args)?;
                     }
                     AgentEvent::ToolResult { output } => {
-                        let show_details = cfg.show_tool_details.unwrap_or(false);
-                        let summary = summarize_tool_result(&output, show_details);
-                        let (line, color) = match summary {
-                            ToolResultSummary::Ok(s) => (format!("  └ {}", s), Color::DarkGrey),
-                            ToolResultSummary::Err(s) => (format!("  └ ✗ {}", s), C_ERROR),
-                        };
-                        renderer.write_line(&sanitize_output(&line), color)?;
+                        render_tool_result_block(&mut renderer, &output)?;
                     }
                     AgentEvent::Done { response, tokens, cost } => {
                         was_reasoning = false;

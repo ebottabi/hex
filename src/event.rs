@@ -22,6 +22,7 @@ pub enum AgentEvent {
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     Key(crossterm::event::KeyEvent),
+    Paste(String),
     ScrollUp,
     ScrollDown,
     Resize(u16, u16),

@@ -701,6 +701,14 @@ pub async fn handle_slash(
                 "  /pentest <scope>       run authorized pentest pipeline in-session",
                 C_RESULT,
             )?;
+            renderer.write_line(
+                "  /scope [target...]     show or grant authorized scope for ad-hoc security tools",
+                C_RESULT,
+            )?;
+            renderer.write_line(
+                "  /clear-scope           drop the active scope (tools will refuse)",
+                C_RESULT,
+            )?;
             renderer.write_line("  /prompt                list available prompts", C_RESULT)?;
             renderer.write_line("  /prompt <name>         activate a prompt", C_RESULT)?;
             renderer.write_line("  /prompt default        clear active prompt", C_RESULT)?;
@@ -733,6 +741,131 @@ pub async fn handle_slash(
             renderer.write_line("  Ctrl+R                 toggle reasoning", C_RESULT)?;
             renderer.write_line("  Ctrl+C / Ctrl+D        interrupt/quit", C_RESULT)?;
             renderer.write_line("  mouse scroll           scroll chat", C_RESULT)?;
+        }
+        "/scope" => {
+            if !cli.authorized_pentest {
+                renderer.write_line(
+                    "/scope requires hex to be launched with --authorized-pentest",
+                    C_ERROR,
+                )?;
+                renderer.write_line(
+                    "  e.g. hex --authorized-pentest --scope example.com",
+                    C_RESULT,
+                )?;
+                return Ok(());
+            }
+            if parts.len() < 2 {
+                match crate::agent::tools::sec::current_shared_policy() {
+                    Some(p) => {
+                        renderer.write_line(
+                            &format!("active scope: {}", p.target_scope.join(", ")),
+                            C_AGENT,
+                        )?;
+                        renderer.write_line(
+                            &format!("rules ({}):", p.rules_of_engagement.len()),
+                            C_RESULT,
+                        )?;
+                        for r in &p.rules_of_engagement {
+                            renderer.write_line(&format!("  - {}", r), C_RESULT)?;
+                        }
+                    }
+                    None => {
+                        renderer.write_line("no active scope", C_AGENT)?;
+                        renderer.write_line(
+                            "usage: /scope <target1> [target2 ...] [roe=<rule>]",
+                            C_RESULT,
+                        )?;
+                        renderer
+                            .write_line("example: /scope api.example.com 10.0.0.0/24", C_RESULT)?;
+                    }
+                }
+                return Ok(());
+            }
+            let rest = parts[1..].join(" ");
+            let mut scope_tokens: Vec<String> = Vec::new();
+            let mut roe_tokens: Vec<String> = Vec::new();
+            for tok in rest.split(|c: char| c.is_whitespace() || c == ',') {
+                let tok = tok.trim();
+                if tok.is_empty() {
+                    continue;
+                }
+                if let Some(r) = tok.strip_prefix("roe=") {
+                    if !r.is_empty() {
+                        roe_tokens.push(r.to_string());
+                    }
+                } else if looks_like_scope_token(tok) {
+                    scope_tokens.push(tok.to_string());
+                } else {
+                    renderer.write_line(&format!("ignoring non-scope token: {}", tok), C_RESULT)?;
+                }
+            }
+            let policy = match crate::pentest::engagement::EngagementPolicy::from_parts(
+                &scope_tokens,
+                &roe_tokens,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    renderer.write_line(&format!("/scope: {}", e), C_ERROR)?;
+                    return Ok(());
+                }
+            };
+            crate::agent::tools::sec::set_shared_policy(policy.clone());
+            let evidence_sink = crate::agent::tools::sec::shared_evidence_sink();
+            if evidence_sink.path().is_none() {
+                let p = std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join("hex-pentest.evidence.jsonl");
+                evidence_sink.set_path(p);
+            }
+            renderer.write_line(
+                &format!(
+                    "scope granted: {} — security tools will now run against these targets.",
+                    policy.target_scope.join(", ")
+                ),
+                C_AGENT,
+            )?;
+            renderer.write_line(
+                &format!(
+                    "rules of engagement: {} rule(s) in effect",
+                    policy.rules_of_engagement.len()
+                ),
+                C_RESULT,
+            )?;
+            let model = client.completion_model(session.model.to_string());
+            *agent = crate::provider::build_agent(
+                model,
+                cli,
+                cfg,
+                context,
+                permission.clone(),
+                ask_tx.clone(),
+                sandbox.clone(),
+                *reasoning_enabled,
+            )
+            .await;
+        }
+        "/clear-scope" => {
+            if !cli.authorized_pentest {
+                renderer.write_line("no active pentest engagement", C_AGENT)?;
+                return Ok(());
+            }
+            crate::agent::tools::sec::clear_shared_policy();
+            renderer.write_line(
+                "scope cleared — security tools will refuse until /scope is set again",
+                C_AGENT,
+            )?;
+            let model = client.completion_model(session.model.to_string());
+            *agent = crate::provider::build_agent(
+                model,
+                cli,
+                cfg,
+                context,
+                permission.clone(),
+                ask_tx.clone(),
+                sandbox.clone(),
+                *reasoning_enabled,
+            )
+            .await;
         }
         "/pentest" => {
             if parts.len() < 2 {
@@ -802,10 +935,10 @@ pub async fn handle_slash(
             );
             let pmodel = client.completion_model(session.model.to_string());
 
-            let policy_handle = crate::agent::tools::sec::new_policy_handle();
+            let policy_handle = crate::agent::tools::sec::shared_policy_handle();
             *policy_handle.write().unwrap() = Some(policy.clone());
-            let evidence_sink =
-                crate::agent::tools::sec::EvidenceSink::with_path(evidence_path.clone());
+            let evidence_sink = crate::agent::tools::sec::shared_evidence_sink();
+            evidence_sink.set_path(evidence_path.clone());
             let sec_ctx = crate::agent::tools::sec::SecContext::new(
                 policy_handle,
                 evidence_sink,
@@ -825,22 +958,16 @@ pub async fn handle_slash(
                 Some(sec_ctx),
             );
 
-            let (status_tx, mut status_rx) =
-                tokio::sync::mpsc::unbounded_channel::<String>();
-            let mut executor =
-                crate::pentest::agent_executor::AgentExecutor::new(pentest_agent)
-                    .with_status(status_tx);
+            let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+            let mut executor = crate::pentest::agent_executor::AgentExecutor::new(pentest_agent)
+                .with_status(status_tx);
 
             renderer.write_line(
                 "running pentest pipeline (recon → validate → assess)...",
                 C_AGENT,
             )?;
-            let pipeline_fut = crate::pentest::pipeline::run(
-                &policy,
-                &mut executor,
-                &mut evidence,
-                &report_path,
-            );
+            let pipeline_fut =
+                crate::pentest::pipeline::run(&policy, &mut executor, &mut evidence, &report_path);
             tokio::pin!(pipeline_fut);
 
             let result = loop {

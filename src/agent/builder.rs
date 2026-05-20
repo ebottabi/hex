@@ -87,6 +87,7 @@ fn build_inner<M: CompletionModel + 'static>(
     ];
 
     if let Some(ctx) = sec_ctx {
+        base_tools.push(Box::new(tools::sec::SetScopeTool::new(ctx.clone())));
         base_tools.push(Box::new(tools::sec::NmapTool::new(ctx.clone())));
         base_tools.push(Box::new(tools::sec::MasscanTool::new(ctx.clone())));
         base_tools.push(Box::new(tools::sec::SubfinderTool::new(ctx.clone())));
@@ -137,7 +138,10 @@ pub fn compose_pentest_preamble(
 
     preamble.push_str("\n\n## Engagement scope (authoritative)\n");
     if scope.is_empty() {
-        preamble.push_str("- (none provided — refuse to act)\n");
+        preamble.push_str(
+            "- (no scope set yet — when the user names a target, call \
+             `set_engagement_scope` with it before any other tool)\n",
+        );
     } else {
         for s in scope {
             preamble.push_str(&format!("- {}\n", s));
@@ -211,19 +215,28 @@ pub fn build_agent(
     reasoning_enabled: bool,
 ) -> AnyAgent {
     let (preamble, sec_ctx) = if cli.authorized_pentest {
-        let preamble = compose_pentest_preamble(context, &cli.scope, &[]);
-        let policy_handle = tools::sec::new_policy_handle();
-        if !cli.scope.is_empty() {
-            if let Ok(policy) =
+        let policy_handle = tools::sec::shared_policy_handle();
+        if !cli.scope.is_empty()
+            && policy_handle.read().map(|g| g.is_none()).unwrap_or(false)
+            && let Ok(policy) =
                 crate::pentest::engagement::EngagementPolicy::from_parts(&cli.scope, &[])
-            {
-                *policy_handle.write().unwrap() = Some(policy);
-            }
+        {
+            *policy_handle.write().unwrap() = Some(policy);
         }
-        let evidence_path = std::env::current_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .join("hex-pentest.evidence.jsonl");
-        let evidence_sink = tools::sec::EvidenceSink::with_path(evidence_path);
+        let active = policy_handle
+            .read()
+            .ok()
+            .and_then(|g| g.clone())
+            .unwrap_or_else(crate::pentest::engagement::EngagementPolicy::denied);
+        let preamble =
+            compose_pentest_preamble(context, &active.target_scope, &active.rules_of_engagement);
+        let evidence_sink = tools::sec::shared_evidence_sink();
+        if evidence_sink.path().is_none() {
+            let evidence_path = std::env::current_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .join("hex-pentest.evidence.jsonl");
+            evidence_sink.set_path(evidence_path);
+        }
         let sec_ctx = tools::sec::SecContext::new(
             policy_handle,
             evidence_sink,

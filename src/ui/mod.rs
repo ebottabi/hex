@@ -210,6 +210,11 @@ pub async fn run_interactive(
                     }
                     _ => {}
                 },
+                Ok(event::Event::Paste(s)) => {
+                    if user_tx_clone.blocking_send(UserEvent::Paste(s)).is_err() {
+                        break;
+                    }
+                }
                 Ok(event::Event::Resize(cols, rows)) => {
                     let _ = user_tx_clone.blocking_send(UserEvent::Resize(cols, rows));
                 }
@@ -268,6 +273,11 @@ pub async fn run_interactive(
                             renderer.clear_selection();
                             refresh_display(&mut renderer, &input, session, is_running, loop_label.as_deref(), context.current_prompt_name.as_deref(), perm_mode().as_deref())?;
                         }
+                        continue;
+                    }
+                    UserEvent::Paste(s) => {
+                        input.insert_str(&s);
+                        refresh_display(&mut renderer, &input, session, is_running, loop_label.as_deref(), context.current_prompt_name.as_deref(), perm_mode().as_deref())?;
                         continue;
                     }
                     UserEvent::Key(key) => {

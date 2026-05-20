@@ -23,6 +23,7 @@ pub mod ropper;
 pub mod scoutsuite;
 pub mod searchsploit;
 pub mod semgrep;
+pub mod set_scope;
 pub mod sslyze;
 pub mod subfinder;
 pub mod suricata_eve;
@@ -55,6 +56,7 @@ pub use ropper::RopperTool;
 pub use scoutsuite::ScoutsuiteTool;
 pub use searchsploit::SearchsploitTool;
 pub use semgrep::SemgrepTool;
+pub use set_scope::SetScopeTool;
 pub use sslyze::SslyzeTool;
 pub use subfinder::SubfinderTool;
 pub use suricata_eve::SuricataEveTool;
@@ -88,6 +90,36 @@ pub fn new_policy_handle() -> PolicyHandle {
     Arc::new(RwLock::new(None))
 }
 
+/// Process-wide policy handle and evidence sink shared by every agent rebuild
+/// in the running session. This lets users grant scope conversationally via
+/// `/scope` and have it persist across `/model`, `/provider`, `/pentest`, and
+/// follow-up turns without restarting the CLI.
+static SHARED_POLICY: std::sync::OnceLock<PolicyHandle> = std::sync::OnceLock::new();
+static SHARED_EVIDENCE: std::sync::OnceLock<EvidenceSink> = std::sync::OnceLock::new();
+
+pub fn shared_policy_handle() -> PolicyHandle {
+    SHARED_POLICY.get_or_init(new_policy_handle).clone()
+}
+
+pub fn shared_evidence_sink() -> EvidenceSink {
+    SHARED_EVIDENCE.get_or_init(EvidenceSink::empty).clone()
+}
+
+pub fn set_shared_policy(policy: EngagementPolicy) {
+    let h = shared_policy_handle();
+    *h.write().unwrap_or_else(|e| e.into_inner()) = Some(policy);
+}
+
+pub fn clear_shared_policy() {
+    let h = shared_policy_handle();
+    *h.write().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+pub fn current_shared_policy() -> Option<EngagementPolicy> {
+    let h = shared_policy_handle();
+    h.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ToolInvocation {
     pub ts: String,
@@ -117,6 +149,10 @@ impl EvidenceSink {
 
     pub fn set_path(&self, path: PathBuf) {
         *self.inner.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+    }
+
+    pub fn path(&self) -> Option<PathBuf> {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn clear(&self) {
@@ -174,8 +210,9 @@ pub fn require_policy(ctx: &SecContext) -> Result<EngagementPolicy, ToolError> {
     let guard = ctx.policy.read().unwrap_or_else(|e| e.into_inner());
     guard.clone().ok_or_else(|| {
         ToolError::Msg(
-            "no active pentest engagement policy. Launch with --authorized-pentest \
-             or use /pentest <scope> to activate."
+            "no active pentest engagement policy. Type `/scope <target>` (e.g. \
+             `/scope api.example.com`) to grant authorized scope for this session, \
+             or launch hex with --authorized-pentest --scope <target>."
                 .to_string(),
         )
     })

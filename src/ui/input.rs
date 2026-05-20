@@ -104,6 +104,26 @@ impl InputEditor {
         self.prompt_names = names;
     }
 
+    /// Insert a string at the cursor — used for bracketed-paste events so
+    /// multi-line clipboard payloads land as a single block instead of being
+    /// re-split into separate key events (which would submit on the first
+    /// embedded newline).
+    pub fn insert_str(&mut self, s: &str) {
+        if s.is_empty() {
+            return;
+        }
+        let normalized: String = s
+            .replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .chars()
+            .filter(|c| !matches!(*c, '\u{0007}' | '\u{001B}'))
+            .collect();
+        let mut buf = self.buffer.to_string();
+        buf.insert_str(self.cursor, &normalized);
+        self.cursor += normalized.len();
+        self.buffer = CompactString::new(buf);
+    }
+
     pub fn load_global_history(&mut self) {
         if let Ok(entries) = crate::session::chat_history::load_history() {
             self.history = entries

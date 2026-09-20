@@ -132,8 +132,26 @@ jobs:
           REMOTE
 
       - name: Smoke test remote
+        id: smoke
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh "$USER@$HOST" 'hex --version'
+
+      - name: Roll back failed deploy
+        if: steps.smoke.outcome == 'failure'
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh "$USER@$HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          if [[ -f /var/backups/hex.previous ]]; then
+              sudo install -m 0755 /var/backups/hex.previous /usr/local/bin/hex
+              echo "rollback: restored previous hex binary"
+          else
+              echo "rollback: no previous binary to restore; removing failed install" >&2
+              sudo rm -f /usr/local/bin/hex
+          fi
+          REMOTE

@@ -43,11 +43,18 @@ else
     warn "install-tools.sh not in bundle — skipping tools install"
 fi
 
-# 3. final sanity check
+# 3. final sanity check — automatically restore the previous binary on failure
 if "$INSTALL_DIR/$BIN_NAME" --version >/dev/null 2>&1; then
     ok "hex is installed and runnable"
 else
-    err "hex installed but --version failed"
+    err "hex installed but --version failed — rolling back"
+    if [[ -f "$BACKUP_DIR/hex.previous" ]]; then
+        install -m 0755 "$BACKUP_DIR/hex.previous" "$INSTALL_DIR/$BIN_NAME"
+        ok "restored previous binary from $BACKUP_DIR/hex.previous"
+    else
+        warn "no previous binary backup — removing failed install"
+        rm -f "$INSTALL_DIR/$BIN_NAME"
+    fi
     exit 1
 fi
 

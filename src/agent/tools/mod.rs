@@ -130,12 +130,38 @@ pub async fn check_perm(
     tool: &str,
     input_key: &str,
 ) -> Result<(), ToolError> {
+    check_perm_inner(permission, ask_tx, tool, input_key, false).await
+}
+
+/// Like `check_perm`, but refuses any input that no explicit permission rule
+/// allows. Used by the general shell tool while an authorized pentest session is
+/// active so only the conservative allowlist can run.
+pub async fn check_perm_allowlisted(
+    permission: &Option<PermCheck>,
+    ask_tx: &Option<AskSender>,
+    tool: &str,
+    input_key: &str,
+) -> Result<(), ToolError> {
+    check_perm_inner(permission, ask_tx, tool, input_key, true).await
+}
+
+async fn check_perm_inner(
+    permission: &Option<PermCheck>,
+    ask_tx: &Option<AskSender>,
+    tool: &str,
+    input_key: &str,
+    allowlisted_only: bool,
+) -> Result<(), ToolError> {
     let Some(perm) = permission else {
         return Ok(());
     };
     let result = {
         let mut guard = perm.lock().unwrap_or_else(|e| e.into_inner());
-        guard.check(tool, input_key)
+        if allowlisted_only {
+            guard.check_allowlisted(tool, input_key)
+        } else {
+            guard.check(tool, input_key)
+        }
     };
     match result {
         CheckResult::Allowed => Ok(()),

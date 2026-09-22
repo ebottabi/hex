@@ -295,7 +295,7 @@ impl Cli {
     }
 
     pub fn resolve_security_mode(&self, cfg: &Config) -> SecurityMode {
-        if self.yolo || cfg.yolo.unwrap_or(false) {
+        let mode = if self.yolo || cfg.yolo.unwrap_or(false) {
             SecurityMode::Yolo
         } else if self.accept_all || cfg.accept_all.unwrap_or(false) {
             SecurityMode::Accept
@@ -310,6 +310,14 @@ impl Cli {
             }
         } else {
             SecurityMode::Standard
+        };
+
+        // A pentest engagement must never run with the permission checker
+        // disabled, so `yolo` is refused while `--authorized-pentest` is set.
+        if self.authorized_pentest && mode == SecurityMode::Yolo {
+            SecurityMode::Standard
+        } else {
+            mode
         }
     }
 }
@@ -456,6 +464,15 @@ mod tests {
             ..Config::default()
         };
         assert_eq!(cli.resolve_security_mode(&cfg), SecurityMode::Restrictive);
+    }
+
+    #[test]
+    fn yolo_is_refused_during_authorized_pentest() {
+        let cli = Cli::parse_from(["--authorized-pentest", "--yolo"]);
+        assert_eq!(
+            cli.resolve_security_mode(&Config::default()),
+            SecurityMode::Standard
+        );
     }
 
     #[test]

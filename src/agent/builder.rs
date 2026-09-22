@@ -65,6 +65,11 @@ fn build_inner<M: CompletionModel + 'static>(
         return builder.build();
     }
 
+    // While an authorized pentest session is active the general shell tool is
+    // locked to the conservative permission allowlist so it cannot reach the
+    // network or run offensive binaries around the scope-checked wrappers.
+    let restrict_shell_to_allowlist = sec_ctx.is_some();
+
     let mut base_tools: Vec<Box<dyn rig::tool::ToolDyn>> = vec![
         Box::new(tools::ReadTool::new(permission.clone(), ask_tx.clone())),
         Box::new(tools::WriteTool::new(permission.clone(), ask_tx.clone())),
@@ -73,6 +78,7 @@ fn build_inner<M: CompletionModel + 'static>(
             permission.clone(),
             ask_tx.clone(),
             sandbox.clone(),
+            restrict_shell_to_allowlist,
         )),
         Box::new(tools::GrepTool::new(permission.clone(), ask_tx.clone())),
         Box::new(tools::FindFilesTool::new(
@@ -87,7 +93,8 @@ fn build_inner<M: CompletionModel + 'static>(
     ];
 
     if let Some(ctx) = sec_ctx {
-        base_tools.push(Box::new(tools::sec::SetScopeTool::new(ctx.clone())));
+        // The engagement scope is operator-only (the `--scope` flag and the
+        // `/scope` slash command); it is deliberately not exposed to the model.
         base_tools.push(Box::new(tools::sec::NmapTool::new(ctx.clone())));
         base_tools.push(Box::new(tools::sec::MasscanTool::new(ctx.clone())));
         base_tools.push(Box::new(tools::sec::SubfinderTool::new(ctx.clone())));
@@ -139,8 +146,7 @@ pub fn compose_pentest_preamble(
     preamble.push_str("\n\n## Engagement scope (authoritative)\n");
     if scope.is_empty() {
         preamble.push_str(
-            "- (no scope set yet — when the user names a target, call \
-             `set_engagement_scope` with it before any other tool)\n",
+            "- (no scope set yet — ask the operator to run the /scope <target> command so they grant the boundary; refuse every security tool until scope is set)\n",
         );
     } else {
         for s in scope {

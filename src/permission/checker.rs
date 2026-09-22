@@ -190,6 +190,24 @@ impl PermissionChecker {
         self.finalize_check(tool, path, action)
     }
 
+    /// Like `check`, but denies any input that no explicit allow rule matches.
+    /// Used to lock the general shell tool down to the conservative allowlist
+    /// while an authorized pentest session is active, so it can never run an
+    /// unclassified command regardless of the configured default action.
+    pub fn check_allowlisted(&mut self, tool: &str, input: &str) -> CheckResult {
+        if self.is_session_allowed(tool, input) {
+            return CheckResult::Allowed;
+        }
+        if !self.has_any_rule_match(tool, input, input) {
+            return CheckResult::Denied(
+                "blocked while a pentest engagement is active: command is not on the engagement allowlist"
+                    .to_string(),
+            );
+        }
+        let base = self.base_action_for(tool, input, input);
+        self.finalize_check(tool, input, base)
+    }
+
     pub fn add_session_allowlist(&mut self, tool: String, pattern: &str) {
         self.session_allowlist.push((tool, Pattern::new(pattern)));
     }
@@ -392,6 +410,42 @@ mod tests {
             mode,
             Some(std::path::PathBuf::from("/home/user/project")),
         )
+    }
+
+    #[test]
+    fn allowlisted_allows_rules_and_denies_unclassified() {
+        let mut checker = make_checker(SecurityMode::Standard);
+        assert_eq!(
+            checker.check_allowlisted("bash", "ls -la"),
+            CheckResult::Allowed
+        );
+        assert!(matches!(
+            checker.check_allowlisted("bash", "nmap 10.0.0.5"),
+            CheckResult::Denied(_)
+        ));
+    }
+
+    #[test]
+    fn allowlisted_still_honours_explicit_denies() {
+        let mut checker = make_checker(SecurityMode::Standard);
+        assert!(matches!(
+            checker.check_allowlisted("bash", "dd if=/dev/zero of=/dev/sda"),
+            CheckResult::Denied(_)
+        ));
+    }
+
+    #[test]
+    fn allowlisted_ignores_default_allow() {
+        // default action Allow must not leak an unclassified command through.
+        let config = PermissionConfig {
+            default: Some(Action::Allow),
+            ..PermissionConfig::default()
+        };
+        let mut checker = PermissionChecker::new(&config, SecurityMode::Standard, None);
+        assert!(matches!(
+            checker.check_allowlisted("bash", "curl http://evil.example"),
+            CheckResult::Denied(_)
+        ));
     }
 
     #[test]

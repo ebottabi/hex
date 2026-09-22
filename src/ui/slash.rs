@@ -448,7 +448,12 @@ pub async fn handle_slash(
                         }
                     }
                     "yolo" => {
-                        if let Some(p) = permission {
+                        if cli.authorized_pentest {
+                            renderer.write_line(
+                                "yolo is disabled during an authorized pentest engagement",
+                                C_ERROR,
+                            )?;
+                        } else if let Some(p) = permission {
                             p.lock()
                                 .unwrap_or_else(|e| e.into_inner())
                                 .set_mode(SecurityMode::Yolo);
